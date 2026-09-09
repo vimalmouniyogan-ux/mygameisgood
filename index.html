@@ -4,488 +4,112 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Neon Strike - Multiplayer FPS</title>
-
   <style>
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
+    *{box-sizing:border-box;margin:0;padding:0}
+    html,body{width:100%;height:100%;overflow:hidden;background:#02050a;color:#fff;font-family:Arial,Helvetica,sans-serif;user-select:none;-webkit-user-select:none}
+    #game{position:fixed;inset:0;width:100%;height:100%}
+    canvas{display:block}
 
-    html,
-    body {
-      width: 100%;
-      height: 100%;
-      overflow: hidden;
-      background: #02050a;
-      color: #ffffff;
-      font-family: Arial, Helvetica, sans-serif;
-      user-select: none;
-      -webkit-user-select: none;
-    }
+    #hud{position:fixed;top:16px;left:16px;z-index:30;min-width:245px;padding:13px 16px;border:1px solid rgba(0,220,255,.3);border-radius:12px;background:rgba(3,8,15,.78);box-shadow:0 0 28px rgba(0,170,255,.08);backdrop-filter:blur(8px);pointer-events:none}
+    .hudRow{display:flex;justify-content:space-between;align-items:center;gap:24px;margin:5px 0;font-size:14px;font-weight:900;letter-spacing:.55px}
+    .hudLabel{color:#8da3b6}.health{color:#3dff88}.score{color:#61d8ff}.coins{color:#ffd45a}.players{color:#ffb85a}.gun{color:#ff76ff}
 
-    #game {
-      position: fixed;
-      inset: 0;
-      width: 100%;
-      height: 100%;
-    }
+    #crosshair{position:fixed;left:50%;top:50%;width:26px;height:26px;z-index:35;transform:translate(-50%,-50%);pointer-events:none;transition:transform .12s ease}
+    #crosshair::before,#crosshair::after{content:"";position:absolute;background:#fff;box-shadow:0 0 4px rgba(255,255,255,.95),0 0 12px rgba(0,210,255,.6)}
+    #crosshair::before{width:2px;height:22px;left:12px;top:2px}.crosshairSmall{transform:translate(-50%,-50%) scale(.72)}
+    #crosshair::after{width:22px;height:2px;left:2px;top:12px}
+    #crosshair.scoped{transform:translate(-50%,-50%) scale(.72)}
 
-    canvas {
-      display: block;
-    }
+    #damageFlash{position:fixed;inset:0;z-index:32;background:rgba(255,0,0,.32);opacity:0;pointer-events:none;transition:opacity .08s ease}
+    #hitMarker{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:36;color:#ff5470;font-size:28px;font-weight:900;opacity:0;pointer-events:none;text-shadow:0 0 8px rgba(255,50,80,.95),0 0 18px rgba(255,50,80,.5)}
+    #killMessage{position:fixed;left:50%;top:40%;transform:translate(-50%,-50%);z-index:36;color:#ffd45a;font-size:28px;font-weight:900;letter-spacing:2px;opacity:0;pointer-events:none;text-shadow:0 0 16px rgba(255,212,90,.35);transition:opacity .1s ease}
 
-    #hud {
-      position: fixed;
-      top: 18px;
-      left: 18px;
-      z-index: 30;
-      min-width: 225px;
-      padding: 14px 17px;
-      border: 1px solid rgba(0, 220, 255, 0.32);
-      border-radius: 12px;
-      background: rgba(3, 8, 15, 0.76);
-      box-shadow: 0 0 28px rgba(0, 170, 255, 0.08);
-      backdrop-filter: blur(8px);
-      pointer-events: none;
-    }
+    #ammoBox{position:fixed;right:22px;bottom:22px;z-index:32;text-align:right;text-shadow:0 0 10px rgba(0,220,255,.18);pointer-events:none}
+    #ammoValue{font-size:48px;font-weight:1000;letter-spacing:1px}#reserveValue{font-size:18px;color:#97aabb;font-weight:900}
+    #reloadText{font-size:13px;color:#ffd45a;font-weight:900;letter-spacing:1px;margin-top:3px;opacity:0}
 
-    .hudRow {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 24px;
-      margin: 5px 0;
-      font-size: 15px;
-      font-weight: 800;
-      letter-spacing: 0.5px;
-    }
+    #killFeed{position:fixed;right:18px;top:18px;z-index:31;width:min(38vw,360px);display:flex;flex-direction:column;gap:6px;pointer-events:none}
+    .feedItem{padding:8px 10px;border-radius:7px;background:rgba(3,8,15,.72);border:1px solid rgba(255,255,255,.08);font-size:13px;font-weight:800;opacity:1;transition:opacity .35s ease}
 
-    .hudLabel {
-      color: #8da3b6;
-    }
+    #scoreboard{position:fixed;left:50%;top:18px;transform:translateX(-50%);z-index:70;display:none;width:min(92vw,680px);max-height:70vh;overflow:auto;padding:16px;border-radius:12px;border:1px solid rgba(0,220,255,.28);background:rgba(3,8,15,.96);box-shadow:0 0 45px rgba(0,170,255,.12)}
+    #scoreboard h3{text-align:center;letter-spacing:2px;margin-bottom:10px}.scoreRow{display:grid;grid-template-columns:42px 1fr 90px 90px;gap:8px;padding:8px 6px;border-bottom:1px solid rgba(255,255,255,.06);font-size:13px}.scoreHead{color:#7d93a5;font-weight:900}
 
-    #healthValue {
-      color: #3dff88;
-    }
+    #shopButton{position:fixed;left:16px;bottom:16px;z-index:40;border:1px solid rgba(0,220,255,.45);border-radius:9px;padding:11px 16px;background:rgba(3,10,18,.94);color:#fff;font-weight:900;letter-spacing:1px;cursor:pointer}
+    #shopPanel{position:fixed;left:50%;top:50%;width:min(94vw,700px);max-height:82vh;overflow-y:auto;transform:translate(-50%,-50%);z-index:80;display:none;padding:24px;border:1px solid rgba(0,220,255,.38);border-radius:16px;background:rgba(4,10,18,.98);box-shadow:0 0 70px rgba(0,180,255,.15)}
+    #shopHeader{display:flex;justify-content:space-between;align-items:center;margin-bottom:15px}#shopHeader h2{font-size:26px;letter-spacing:2px}#closeShop{border:0;background:transparent;color:#fff;font-size:24px;cursor:pointer}
+    #shopCoins{margin-bottom:18px;color:#ffd45a;font-size:16px;font-weight:900}.gunCard{margin-bottom:12px;padding:16px;border:1px solid rgba(255,255,255,.1);border-radius:11px;background:rgba(255,255,255,.035)}.gunTop{display:flex;justify-content:space-between;align-items:center;gap:14px}.gunName{font-size:19px;font-weight:900}.gunStats{margin-top:7px;color:#a7b7c7;font-size:13px;line-height:1.5}.gunAction{min-width:104px;padding:9px 13px;border:0;border-radius:7px;color:#fff;font-weight:900;cursor:pointer}.buyButton{background:#9d6e16}.equipButton{background:#146e99}.equippedButton{background:#28643e;cursor:default}
 
-    #scoreValue {
-      color: #61d8ff;
-    }
+    #startOverlay{position:fixed;inset:0;z-index:100;display:flex;justify-content:center;align-items:center;background:radial-gradient(circle at center,rgba(8,28,44,.4),rgba(0,0,0,.96)),#020305}
+    #startPanel{width:min(92vw,540px);padding:35px;border:1px solid rgba(0,220,255,.3);border-radius:18px;background:rgba(4,10,18,.92);text-align:center;box-shadow:0 0 70px rgba(0,180,255,.1)}
+    #startPanel h1{font-size:clamp(40px,8vw,74px);line-height:.95;margin-bottom:12px;letter-spacing:4px}#startPanel .subtitle{margin-bottom:24px;color:#79c8db;font-size:14px;letter-spacing:3px}
+    #usernameInput{width:100%;height:48px;margin-bottom:15px;padding:0 15px;border:1px solid rgba(100,220,255,.28);border-radius:9px;outline:none;background:rgba(255,255,255,.04);color:#fff;font-size:16px;text-align:center}
+    #playButton{width:100%;height:52px;border:0;border-radius:9px;background:linear-gradient(135deg,#08b5db,#2b64ff);color:#fff;font-size:16px;font-weight:900;letter-spacing:2px;cursor:pointer}
+    #playButton:disabled{opacity:.55;cursor:wait}
+    #controlsText{margin-top:20px;color:#8f9eac;line-height:1.8;font-size:13px}#statusText{min-height:20px;margin-top:15px;color:#ffce62;font-size:13px}
 
-    #coinsValue {
-      color: #ffd45a;
-    }
-
-    #playerCountValue {
-      color: #ffb85a;
-    }
-
-    #gunValue {
-      color: #ff76ff;
-    }
-
-    #crosshair {
-      position: fixed;
-      left: 50%;
-      top: 50%;
-      width: 26px;
-      height: 26px;
-      z-index: 35;
-      transform: translate(-50%, -50%);
-      pointer-events: none;
-    }
-
-    #crosshair::before,
-    #crosshair::after {
-      content: "";
-      position: absolute;
-      background: #ffffff;
-      box-shadow:
-        0 0 4px rgba(255, 255, 255, 0.95),
-        0 0 12px rgba(0, 210, 255, 0.6);
-    }
-
-    #crosshair::before {
-      width: 2px;
-      height: 22px;
-      left: 12px;
-      top: 2px;
-    }
-
-    #crosshair::after {
-      width: 22px;
-      height: 2px;
-      left: 2px;
-      top: 12px;
-    }
-
-    #damageFlash {
-      position: fixed;
-      inset: 0;
-      z-index: 32;
-      background: rgba(255, 0, 0, 0.3);
-      opacity: 0;
-      pointer-events: none;
-      transition: opacity 0.08s ease;
-    }
-
-    #hitMarker {
-      position: fixed;
-      left: 50%;
-      top: 50%;
-      transform: translate(-50%, -50%);
-      z-index: 36;
-      color: #ff5470;
-      font-size: 28px;
-      font-weight: 900;
-      opacity: 0;
-      pointer-events: none;
-      text-shadow:
-        0 0 8px rgba(255, 50, 80, 0.95),
-        0 0 18px rgba(255, 50, 80, 0.5);
-    }
-
-    #killMessage {
-      position: fixed;
-      left: 50%;
-      top: 42%;
-      transform: translate(-50%, -50%);
-      z-index: 36;
-      color: #ffd45a;
-      font-size: 30px;
-      font-weight: 900;
-      letter-spacing: 2px;
-      opacity: 0;
-      pointer-events: none;
-    }
-
-    #shopButton {
-      position: fixed;
-      left: 18px;
-      bottom: 18px;
-      z-index: 40;
-      border: 1px solid rgba(0, 220, 255, 0.45);
-      border-radius: 9px;
-      padding: 12px 18px;
-      background: rgba(3, 10, 18, 0.94);
-      color: #ffffff;
-      font-weight: 900;
-      letter-spacing: 1px;
-      cursor: pointer;
-    }
-
-    #shopPanel {
-      position: fixed;
-      left: 50%;
-      top: 50%;
-      width: min(94vw, 670px);
-      max-height: 82vh;
-      overflow-y: auto;
-      transform: translate(-50%, -50%);
-      z-index: 80;
-      display: none;
-      padding: 24px;
-      border: 1px solid rgba(0, 220, 255, 0.38);
-      border-radius: 16px;
-      background: rgba(4, 10, 18, 0.98);
-      box-shadow: 0 0 70px rgba(0, 180, 255, 0.15);
-    }
-
-    #shopHeader {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 15px;
-    }
-
-    #shopHeader h2 {
-      font-size: 26px;
-      letter-spacing: 2px;
-    }
-
-    #closeShop {
-      border: 0;
-      background: transparent;
-      color: #ffffff;
-      font-size: 24px;
-      cursor: pointer;
-    }
-
-    #shopCoins {
-      margin-bottom: 18px;
-      color: #ffd45a;
-      font-size: 16px;
-      font-weight: 900;
-    }
-
-    .gunCard {
-      margin-bottom: 12px;
-      padding: 16px;
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      border-radius: 11px;
-      background: rgba(255, 255, 255, 0.035);
-    }
-
-    .gunTop {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 14px;
-    }
-
-    .gunName {
-      font-size: 19px;
-      font-weight: 900;
-    }
-
-    .gunStats {
-      margin-top: 7px;
-      color: #a7b7c7;
-      font-size: 13px;
-      line-height: 1.5;
-    }
-
-    .gunAction {
-      min-width: 96px;
-      padding: 9px 13px;
-      border: 0;
-      border-radius: 7px;
-      color: #ffffff;
-      font-weight: 900;
-      cursor: pointer;
-    }
-
-    .buyButton {
-      background: #9d6e16;
-    }
-
-    .equipButton {
-      background: #146e99;
-    }
-
-    .equippedButton {
-      background: #28643e;
-      cursor: default;
-    }
-
-    #startOverlay {
-      position: fixed;
-      inset: 0;
-      z-index: 100;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      background:
-        radial-gradient(
-          circle at center,
-          rgba(8, 28, 44, 0.4),
-          rgba(0, 0, 0, 0.95)
-        ),
-        #020305;
-    }
-
-    #startPanel {
-      width: min(92vw, 520px);
-      padding: 35px;
-      border: 1px solid rgba(0, 220, 255, 0.3);
-      border-radius: 18px;
-      background: rgba(4, 10, 18, 0.91);
-      text-align: center;
-    }
-
-    #startPanel h1 {
-      font-size: clamp(40px, 8vw, 74px);
-      line-height: 0.95;
-      margin-bottom: 12px;
-      letter-spacing: 4px;
-    }
-
-    #startPanel .subtitle {
-      margin-bottom: 24px;
-      color: #79c8db;
-      font-size: 14px;
-      letter-spacing: 3px;
-    }
-
-    #usernameInput {
-      width: 100%;
-      height: 48px;
-      margin-bottom: 15px;
-      padding: 0 15px;
-      border: 1px solid rgba(100, 220, 255, 0.28);
-      border-radius: 9px;
-      outline: none;
-      background: rgba(255, 255, 255, 0.04);
-      color: #ffffff;
-      font-size: 16px;
-      text-align: center;
-    }
-
-    #playButton {
-      width: 100%;
-      height: 52px;
-      border: 0;
-      border-radius: 9px;
-      background: linear-gradient(135deg, #08b5db, #2b64ff);
-      color: #ffffff;
-      font-size: 16px;
-      font-weight: 900;
-      letter-spacing: 2px;
-      cursor: pointer;
-    }
-
-    #controlsText {
-      margin-top: 20px;
-      color: #8f9eac;
-      line-height: 1.8;
-      font-size: 13px;
-    }
-
-    #statusText {
-      min-height: 20px;
-      margin-top: 15px;
-      color: #ffce62;
-      font-size: 13px;
-    }
+    #tip{position:fixed;left:50%;bottom:15px;transform:translateX(-50%);z-index:25;padding:6px 10px;border-radius:7px;background:rgba(2,6,10,.52);color:#7890a3;font-size:11px;pointer-events:none}
+    @media (max-width:700px){#hud{min-width:205px}.scoreRow{grid-template-columns:35px 1fr 70px 70px}.ammoBox{right:14px;bottom:14px}.ammoValue{font-size:38px}}
   </style>
 </head>
-
 <body>
-
   <div id="game"></div>
 
   <div id="hud">
-
-    <div class="hudRow">
-      <span class="hudLabel">HEALTH</span>
-      <span id="healthValue">100</span>
-    </div>
-
-    <div class="hudRow">
-      <span class="hudLabel">SCORE</span>
-      <span id="scoreValue">0</span>
-    </div>
-
-    <div class="hudRow">
-      <span class="hudLabel">COINS</span>
-      <span id="coinsValue">0</span>
-    </div>
-
-    <div class="hudRow">
-      <span class="hudLabel">PLAYERS</span>
-      <span id="playerCountValue">1</span>
-    </div>
-
-    <div class="hudRow">
-      <span class="hudLabel">GUN</span>
-      <span id="gunValue">PISTOL</span>
-    </div>
-
+    <div class="hudRow"><span class="hudLabel">HEALTH</span><span id="healthValue" class="health">100</span></div>
+    <div class="hudRow"><span class="hudLabel">SCORE</span><span id="scoreValue" class="score">0</span></div>
+    <div class="hudRow"><span class="hudLabel">COINS</span><span id="coinsValue" class="coins">0</span></div>
+    <div class="hudRow"><span class="hudLabel">PLAYERS</span><span id="playerCountValue" class="players">1</span></div>
+    <div class="hudRow"><span class="hudLabel">GUN</span><span id="gunValue" class="gun">PISTOL</span></div>
   </div>
 
   <div id="crosshair"></div>
-
   <div id="damageFlash"></div>
-
   <div id="hitMarker">✕</div>
-
   <div id="killMessage">+10 COINS</div>
+  <div id="killFeed"></div>
 
+  <div id="ammoBox">
+    <div id="ammoValue">12</div>
+    <div id="reserveValue">/ 60</div>
+    <div id="reloadText">RELOADING...</div>
+  </div>
 
-  <!-- GUN SHOP BUTTON -->
+  <div id="tip">SHIFT SPRINT · C CROUCH/SLIDE · RMB AIM · R RELOAD · 1-5 WEAPONS · TAB SCOREBOARD</div>
 
-  <button id="shopButton">
-    GUN SHOP [B]
-  </button>
-
-
-  <!-- GUN SHOP -->
+  <button id="shopButton">GUN SHOP [B]</button>
 
   <div id="shopPanel">
-
-    <div id="shopHeader">
-
-      <h2>GUN SHOP</h2>
-
-      <button id="closeShop">
-        ✕
-      </button>
-
-    </div>
-
-    <div id="shopCoins">
-      Coins: 0
-    </div>
-
+    <div id="shopHeader"><h2>GUN SHOP</h2><button id="closeShop">✕</button></div>
+    <div id="shopCoins">Coins: 0</div>
     <div id="gunList"></div>
-
   </div>
 
-
-  <!-- START SCREEN -->
+  <div id="scoreboard">
+    <h3>NEON STRIKE — SCOREBOARD</h3>
+    <div class="scoreRow scoreHead"><div>#</div><div>PLAYER</div><div>SCORE</div><div>HP</div></div>
+    <div id="scoreboardList"></div>
+  </div>
 
   <div id="startOverlay">
-
     <div id="startPanel">
-
       <h1>NEON STRIKE</h1>
-
-      <div class="subtitle">
-        MULTIPLAYER FPS
-      </div>
-
-      <input
-        id="usernameInput"
-        type="text"
-        maxlength="16"
-        autocomplete="off"
-        spellcheck="false"
-        placeholder="ENTER PLAYER NAME"
-      >
-
-      <button id="playButton">
-        CLICK TO PLAY
-      </button>
-
+      <div class="subtitle">MULTIPLAYER FPS</div>
+      <input id="usernameInput" type="text" maxlength="16" autocomplete="off" spellcheck="false" placeholder="ENTER PLAYER NAME">
+      <button id="playButton">CLICK TO PLAY</button>
       <div id="controlsText">
-
-        WASD — MOVE<br>
-
-        MOUSE — LOOK<br>
-
-        LEFT CLICK — FIRE<br>
-
-        SPACE — JUMP<br>
-
-        B — GUN SHOP
-
+        WASD — MOVE &nbsp;|&nbsp; SHIFT — SPRINT<br>
+        SPACE — JUMP &nbsp;|&nbsp; C — CROUCH / SLIDE<br>
+        LMB — FIRE &nbsp;|&nbsp; RMB — AIM<br>
+        R — RELOAD &nbsp;|&nbsp; 1-5 — WEAPON SWITCH<br>
+        B — GUN SHOP &nbsp;|&nbsp; TAB — SCOREBOARD
       </div>
-
-      <div id="statusText">
-        Connecting to server...
-      </div>
-
+      <div id="statusText">Connecting to server...</div>
     </div>
-
   </div>
 
-
-  <!-- THREE.JS -->
-
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
-
-  <!-- POINTER LOCK -->
-
   <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/PointerLockControls.js"></script>
-
-  <!-- SOCKET.IO -->
-
   <script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
-
-  <!-- YOUR GAME -->
-
   <script src="game.js"></script>
-
 </body>
 </html>
