@@ -2089,6 +2089,11 @@ function shoot() {
   }
 }
 
+const forward = new THREE.Vector3();
+const right = new THREE.Vector3();
+const move = new THREE.Vector3();
+const velocity = new THREE.Vector3();
+
 /* ======================================================
    MOVEMENT
 ====================================================== */
