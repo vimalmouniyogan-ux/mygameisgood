@@ -1972,13 +1972,13 @@ function updateMovement(
 
     let speed =
       movement.sprint
-        ? 9.5
-        : 6.2;
+        ? 18
+        : 12;
 
     if (
       movement.crouch
     ) {
-      speed = 3.5;
+      speed = 7;
     }
 
     const amount =
@@ -2092,14 +2092,10 @@ function updateCamera() {
       playerPosition.z
     );
 
-    camera.rotation.order =
-      "YXZ";
-
-    camera.rotation.y =
-      yaw;
-
-    camera.rotation.x =
-      pitch;
+    controls.addEventListener("change", () => {
+  yaw = camera.rotation.y;
+  pitch = camera.rotation.x;
+});
 
     gun.visible = true;
   } else {
@@ -2119,24 +2115,17 @@ function updateCamera() {
         : 2.65;
 
     desired.x +=
-      back.x * 6.5;
+      back.x * 3.5;
 
     desired.z +=
-      back.z * 6.5;
+      back.z * 3.5;
 
     camera.position.lerp(
       desired,
       0.2
     );
 
-    camera.rotation.order =
-      "YXZ";
-
-    camera.rotation.y =
-      yaw;
-
-    camera.rotation.x =
-      pitch;
+    
 
     gun.visible = false;
   }
@@ -2622,43 +2611,40 @@ function showKillMessage(
 ====================================================== */
 
 function openGunShop() {
-  if (
-    !playerJoined ||
-    isShopOpen
-  ) {
+  if (!playerJoined || isShopOpen) {
     return;
   }
 
   isShopOpen = true;
-
   firing = false;
   isAiming = false;
 
-  controls.unlock();
+  if (controls.isLocked) {
+    controls.unlock();
+  }
 
-  renderer.domElement.style.cursor =
-    "default";
+  renderer.domElement.style.cursor = "default";
 
-  startOverlay.style.display =
-    "none";
+  startOverlay.style.display = "none";
 
   renderShop();
+  shopPanel.style.display = "block";
 }
 
 function closeGunShop() {
-  if (!isShopOpen)
+  if (!isShopOpen) {
     return;
+  }
 
   isShopOpen = false;
 
-  renderer.domElement.style.cursor =
-    "default";
+  shopPanel.style.display = "none";
 
-  startOverlay.style.display =
-    "flex";
+  renderer.domElement.style.cursor = "default";
 
-  playButton.textContent =
-    "RESUME";
+  startOverlay.style.display = "flex";
+
+  playButton.textContent = "RESUME";
 
   statusText.textContent =
     "Click RESUME to return to the match";
@@ -3080,6 +3066,20 @@ shopButton.addEventListener(
     } else {
       openGunShop();
     }
+  }
+);
+
+shopPanel.addEventListener(
+  "mousedown",
+  event => {
+    event.stopPropagation();
+  }
+);
+
+shopPanel.addEventListener(
+  "click",
+  event => {
+    event.stopPropagation();
   }
 );
 
