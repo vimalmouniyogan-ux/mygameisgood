@@ -1,21 +1,27 @@
+/* ======================================================
+   NEON STRIKE - REBUILT MULTIPLAYER SERVER
+====================================================== */
+
 const express = require("express");
 const http = require("http");
 const path = require("path");
 const { Server } = require("socket.io");
 
 const app = express();
-const server = http.createServer(app);
 
-const io = new Server(server, {
-  cors: {
-    origin: "*",
-    methods: ["GET", "POST"]
-  }
-});
+const server =
+  http.createServer(app);
+
+const io =
+  new Server(server, {
+    cors: {
+      origin: "*",
+      methods: ["GET", "POST"]
+    }
+  });
 
 const PORT =
-  process.env.PORT ||
-  3000;
+  process.env.PORT || 3000;
 
 app.use(
   express.json()
@@ -23,29 +29,20 @@ app.use(
 
 app.use(
   express.static(
-    path.join(
-      __dirname
-    )
+    path.join(__dirname)
   )
 );
-
-/* ======================================================
-   HEALTH
-====================================================== */
 
 app.get(
   "/health",
   (req, res) => {
     res.json({
       ok: true,
-      players: players.size
+      players:
+        players.size
     });
   }
 );
-
-/* ======================================================
-   MAIN PAGE
-====================================================== */
 
 app.get(
   "/",
@@ -60,7 +57,7 @@ app.get(
 );
 
 /* ======================================================
-   GAME DATA
+   WEAPONS
 ====================================================== */
 
 const GUNS = {
@@ -100,86 +97,40 @@ const GUNS = {
   }
 };
 
+/* ======================================================
+   PLAYERS
+====================================================== */
+
 const players =
   new Map();
 
+/* ======================================================
+   MAP COLLISION
+====================================================== */
+
 const collisionBoxes = [];
-
-/* ======================================================
-   SPAWN POINTS
-====================================================== */
-
-const spawnPoints = [
-  {
-    x: -48,
-    y: 2.1,
-    z: 45
-  },
-
-  {
-    x: 48,
-    y: 2.1,
-    z: 45
-  },
-
-  {
-    x: -48,
-    y: 2.1,
-    z: -42
-  },
-
-  {
-    x: 48,
-    y: 2.1,
-    z: -42
-  },
-
-  {
-    x: 0,
-    y: 2.1,
-    z: 45
-  },
-
-  {
-    x: 0,
-    y: 2.1,
-    z: 35
-  }
-];
-
-/* ======================================================
-   COLLISION BOXES
-====================================================== */
 
 function addCollisionBox(
   x,
   y,
   z,
-  width,
-  height,
-  depth
+  w,
+  h,
+  d
 ) {
   collisionBoxes.push({
-    minX:
-      x - width / 2,
-
-    maxX:
-      x + width / 2,
+    minX: x - w / 2,
+    maxX: x + w / 2,
 
     minY: y,
+    maxY: y + h,
 
-    maxY:
-      y + height,
-
-    minZ:
-      z - depth / 2,
-
-    maxZ:
-      z + depth / 2
+    minZ: z - d / 2,
+    maxZ: z + d / 2
   });
 }
 
-/* OUTER WALLS */
+/* Outer walls */
 
 addCollisionBox(
   0,
@@ -217,222 +168,190 @@ addCollisionBox(
   120
 );
 
-/* BUILDINGS */
+/* Towers */
 
 addCollisionBox(
-  -40,
+  -42,
   0,
-  -27,
-  20,
-  8,
-  18
+  -38,
+  17,
+  13,
+  16
 );
 
 addCollisionBox(
-  40,
+  42,
   0,
-  -27,
-  20,
-  8,
-  18
+  -38,
+  17,
+  13,
+  16
 );
 
 addCollisionBox(
-  -43,
+  -42,
   0,
+  38,
+  17,
+  13,
+  16
+);
+
+addCollisionBox(
+  42,
+  0,
+  38,
+  17,
+  13,
+  16
+);
+
+/* Central structures */
+
+addCollisionBox(
+  0,
+  0,
+  -18,
   30,
-  14,
-  6,
-  17
-);
-
-addCollisionBox(
-  43,
-  0,
-  30,
-  14,
-  6,
-  17
-);
-
-/* CENTRAL */
-
-addCollisionBox(
-  0,
-  0,
-  -17,
-  28,
-  7,
+  5,
   3
 );
 
 addCollisionBox(
-  -14,
+  -16,
   0,
-  -8,
-  3,
-  7,
-  18
-);
-
-addCollisionBox(
-  14,
-  0,
-  -8,
-  3,
-  7,
-  18
-);
-
-/* COVER */
-
-addCollisionBox(
-  -30,
-  0,
-  2,
-  14,
-  3,
-  2
-);
-
-addCollisionBox(
-  30,
-  0,
-  2,
-  14,
-  3,
-  2
-);
-
-addCollisionBox(
   -7,
-  0,
-  12,
-  12,
   3,
-  2
-);
-
-addCollisionBox(
   7,
-  0,
-  12,
-  12,
-  3,
-  2
-);
-
-/* BLOCKS */
-
-addCollisionBox(
-  -27,
-  0,
-  -16,
-  6,
-  3,
-  4
+  20
 );
 
 addCollisionBox(
-  27,
+  16,
   0,
-  -16,
-  6,
+  -7,
   3,
-  4
-);
-
-addCollisionBox(
-  -25,
-  0,
-  25,
   7,
-  4,
-  4
+  20
+);
+
+/* Cover */
+
+const covers = [
+  [-30, 2, 13, 2, 3],
+  [30, 2, 13, 2, 3],
+  [-8, 22, 12, 2, 3],
+  [8, 22, 12, 2, 3],
+  [-27, -15, 6, 4, 3],
+  [27, -15, 6, 4, 3],
+  [-24, 24, 7, 4, 4],
+  [24, 24, 7, 4, 4]
+];
+
+for (
+  const [x, z, w, d, h]
+  of covers
+) {
+  addCollisionBox(
+    x,
+    0,
+    z,
+    w,
+    h,
+    d
+  );
+}
+
+/* Pylons */
+
+addCollisionBox(
+  -21,
+  0,
+  -28,
+  2.2,
+  9,
+  2.2
 );
 
 addCollisionBox(
-  25,
+  21,
   0,
-  25,
-  7,
-  4,
-  4
-);
-
-/* CRATES */
-
-addCollisionBox(
-  -38,
-  0,
-  -8,
-  2.8,
-  2.8,
-  2.8
+  -28,
+  2.2,
+  9,
+  2.2
 );
 
 addCollisionBox(
-  -35,
+  -21,
   0,
-  -8,
-  2.8,
-  2.8,
-  2.8
+  28,
+  2.2,
+  9,
+  2.2
 );
 
 addCollisionBox(
-  -38,
+  21,
   0,
-  -5,
-  2.8,
-  2.8,
-  2.8
+  28,
+  2.2,
+  9,
+  2.2
 );
 
-addCollisionBox(
-  -35,
-  0,
-  -5,
-  2.8,
-  2.8,
-  2.8
-);
+/* ======================================================
+   SPAWNS
+====================================================== */
 
-addCollisionBox(
-  38,
-  0,
-  -8,
-  2.8,
-  2.8,
-  2.8
-);
+const spawnPoints = [
+  {
+    x: -50,
+    y: 2.1,
+    z: 48
+  },
 
-addCollisionBox(
-  35,
-  0,
-  -8,
-  2.8,
-  2.8,
-  2.8
-);
+  {
+    x: 50,
+    y: 2.1,
+    z: 48
+  },
 
-addCollisionBox(
-  38,
-  0,
-  -5,
-  2.8,
-  2.8,
-  2.8
-);
+  {
+    x: -50,
+    y: 2.1,
+    z: -48
+  },
 
-addCollisionBox(
-  35,
-  0,
-  -5,
-  2.8,
-  2.8,
-  2.8
-);
+  {
+    x: 50,
+    y: 2.1,
+    z: -48
+  },
+
+  {
+    x: 0,
+    y: 2.1,
+    z: 48
+  },
+
+  {
+    x: 0,
+    y: 2.1,
+    z: 32
+  }
+];
+
+function getSpawnPoint() {
+  return {
+    ...spawnPoints[
+      Math.floor(
+        Math.random() *
+          spawnPoints.length
+      )
+    ]
+  };
+}
 
 /* ======================================================
    HELPERS
@@ -442,11 +361,13 @@ function safeNumber(
   value,
   fallback = 0
 ) {
-  const n =
+  const number =
     Number(value);
 
-  return Number.isFinite(n)
-    ? n
+  return Number.isFinite(
+    number
+  )
+    ? number
     : fallback;
 }
 
@@ -457,10 +378,7 @@ function clamp(
 ) {
   return Math.max(
     min,
-    Math.min(
-      max,
-      value
-    )
+    Math.min(max, value)
   );
 }
 
@@ -468,45 +386,27 @@ function positionCollides(
   position,
   radius = 0.65
 ) {
-  const limit =
-    60 -
-    radius -
-    1;
-
   if (
-    position.x < -limit ||
-    position.x > limit ||
-    position.z < -limit ||
-    position.z > limit
+    position.x < -58 ||
+    position.x > 58 ||
+    position.z < -58 ||
+    position.z > 58
   ) {
     return true;
   }
 
-  const minX =
-    position.x -
-    radius;
-
-  const maxX =
-    position.x +
-    radius;
-
-  const minZ =
-    position.z -
-    radius;
-
-  const maxZ =
-    position.z +
-    radius;
-
   for (
-    const box of
-    collisionBoxes
+    const box of collisionBoxes
   ) {
     if (
-      maxX > box.minX &&
-      minX < box.maxX &&
-      maxZ > box.minZ &&
-      minZ < box.maxZ
+      position.x + radius >
+        box.minX &&
+      position.x - radius <
+        box.maxX &&
+      position.z + radius >
+        box.minZ &&
+      position.z - radius <
+        box.maxZ
     ) {
       return true;
     }
@@ -515,89 +415,39 @@ function positionCollides(
   return false;
 }
 
-function getSpawnPoint() {
-  return (
-    spawnPoints[
-      Math.floor(
-        Math.random() *
-          spawnPoints.length
-      )
-    ]
-  );
-}
-
-function distancePointToRay(
-  point,
-  origin,
-  direction
+function normalize(
+  x,
+  y,
+  z
 ) {
-  const toPoint =
-    {
-      x:
-        point.x -
-        origin.x,
-
-      y:
-        point.y -
-        origin.y,
-
-      z:
-        point.z -
-        origin.z
-    };
-
-  const projection =
-    toPoint.x *
-      direction.x +
-    toPoint.y *
-      direction.y +
-    toPoint.z *
-      direction.z;
+  const length =
+    Math.sqrt(
+      x * x +
+      y * y +
+      z * z
+    );
 
   if (
-    projection < 0
+    !Number.isFinite(
+      length
+    ) ||
+    length < 0.000001
   ) {
-    return Infinity;
+    return null;
   }
 
-  const closest =
-    {
-      x:
-        origin.x +
-        direction.x *
-          projection,
-
-      y:
-        origin.y +
-        direction.y *
-          projection,
-
-      z:
-        origin.z +
-        direction.z *
-          projection
-    };
-
-  return Math.sqrt(
-    Math.pow(
-      point.x -
-        closest.x,
-      2
-    ) +
-      Math.pow(
-        point.y -
-          closest.y,
-        2
-      ) +
-      Math.pow(
-        point.z -
-          closest.z,
-        2
-      )
-  );
+  return {
+    x: x / length,
+    y: y / length,
+    z: z / length
+  };
 }
 
-function rayHitsBox(
+/* ======================================================
+   RAY / BOX
+====================================================== */
+
+function rayAABB(
   origin,
   direction,
   box
@@ -630,23 +480,20 @@ function rayHitsBox(
 
   for (
     const [
-      originAxis,
-      directionAxis,
-      minAxis,
-      maxAxis
+      originValue,
+      directionValue,
+      min,
+      max
     ] of axes
   ) {
     if (
       Math.abs(
-        directionAxis
-      ) <
-      0.000001
+        directionValue
+      ) < 0.00000001
     ) {
       if (
-        originAxis <
-          minAxis ||
-        originAxis >
-          maxAxis
+        originValue < min ||
+        originValue > max
       ) {
         return null;
       }
@@ -654,85 +501,137 @@ function rayHitsBox(
       continue;
     }
 
-    let t1 =
-      (minAxis -
-        originAxis) /
-      directionAxis;
+    let a =
+      (min - originValue) /
+      directionValue;
 
-    let t2 =
-      (maxAxis -
-        originAxis) /
-      directionAxis;
+    let b =
+      (max - originValue) /
+      directionValue;
 
-    if (t1 > t2) {
-      [t1, t2] =
-        [t2, t1];
+    if (a > b) {
+      [
+        a,
+        b
+      ] = [
+        b,
+        a
+      ];
     }
 
     tMin =
       Math.max(
         tMin,
-        t1
+        a
       );
 
     tMax =
       Math.min(
         tMax,
-        t2
+        b
       );
 
     if (
-      tMin >
-      tMax
+      tMin > tMax
     ) {
       return null;
     }
   }
 
-  return tMin >= 0
-    ? tMin
-    : tMax >= 0
-      ? tMax
-      : null;
+  if (tMin >= 0)
+    return tMin;
+
+  if (tMax >= 0)
+    return tMax;
+
+  return null;
 }
 
 function nearestWallDistance(
   origin,
   direction,
-  maxDistance = 120
+  maximum = 120
 ) {
-  let closest =
-    maxDistance;
+  let best =
+    maximum;
 
   for (
-    const box of
-    collisionBoxes
+    const box of collisionBoxes
   ) {
-    const hit =
-      rayHitsBox(
+    const distance =
+      rayAABB(
         origin,
         direction,
         box
       );
 
     if (
-      hit !== null &&
-      hit <
-        closest &&
-      hit >= 0
+      distance !== null &&
+      distance >= 0 &&
+      distance < best
     ) {
-      closest = hit;
+      best =
+        distance;
     }
   }
 
-  return closest;
+  return best;
+}
+
+function raySphere(
+  origin,
+  direction,
+  center,
+  radius
+) {
+  const ox =
+    origin.x -
+    center.x;
+
+  const oy =
+    origin.y -
+    center.y;
+
+  const oz =
+    origin.z -
+    center.z;
+
+  const b =
+    ox * direction.x +
+    oy * direction.y +
+    oz * direction.z;
+
+  const c =
+    ox * ox +
+    oy * oy +
+    oz * oz -
+    radius * radius;
+
+  const discriminant =
+    b * b - c;
+
+  if (
+    discriminant < 0
+  ) {
+    return null;
+  }
+
+  const distance =
+    -b -
+    Math.sqrt(
+      discriminant
+    );
+
+  return distance >= 0
+    ? distance
+    : null;
 }
 
 /* ======================================================
-   PLAYER SNAPSHOT
+   SNAPSHOTS
 ====================================================== */
 
-function playerSnapshot(
+function snapshot(
   player
 ) {
   return {
@@ -742,25 +641,11 @@ function playerSnapshot(
       player.username,
 
     position: {
-      x:
-        player.position.x,
-
-      y:
-        player.position.y,
-
-      z:
-        player.position.z
+      ...player.position
     },
 
     rotation: {
-      x:
-        player.rotation.x,
-
-      y:
-        player.rotation.y,
-
-      z:
-        player.rotation.z
+      ...player.rotation
     },
 
     health:
@@ -771,43 +656,67 @@ function playerSnapshot(
   };
 }
 
-/* ======================================================
-   BROADCAST CURRENT PLAYERS
-====================================================== */
-
-function getPlayersArray(
-  excludeId = null
+function allPlayers(
+  exclude = null
 ) {
   const result = [];
 
   for (
-    const player of
-    players.values()
+    const player
+    of players.values()
   ) {
     if (
-      player.id ===
-      excludeId
+      player.id !==
+      exclude
     ) {
-      continue;
+      result.push(
+        snapshot(player)
+      );
     }
-
-    result.push(
-      playerSnapshot(
-        player
-      )
-    );
   }
 
   return result;
 }
 
+function stateFor(
+  player
+) {
+  return {
+    id: player.id,
+
+    username:
+      player.username,
+
+    health:
+      player.health,
+
+    score:
+      player.score,
+
+    coins:
+      player.coins,
+
+    ownedGuns:
+      player.ownedGuns,
+
+    currentGun:
+      player.currentGun,
+
+    position:
+      player.position,
+
+    rotation:
+      player.rotation
+  };
+}
+
 /* ======================================================
-   SOCKET CONNECTION
+   SOCKET.IO
 ====================================================== */
 
 io.on(
   "connection",
-  (socket) => {
+  socket => {
     console.log(
       "CONNECTED:",
       socket.id
@@ -818,13 +727,11 @@ io.on(
       players.size
     );
 
-    /* ==================================================
-       JOIN GAME
-    ================================================== */
+    /* JOIN */
 
     socket.on(
       "joinGame",
-      (data) => {
+      data => {
         let player =
           players.get(
             socket.id
@@ -833,34 +740,7 @@ io.on(
         if (player) {
           socket.emit(
             "joinAccepted",
-            {
-              id:
-                player.id,
-
-              username:
-                player.username,
-
-              health:
-                player.health,
-
-              score:
-                player.score,
-
-              coins:
-                player.coins,
-
-              ownedGuns:
-                player.ownedGuns,
-
-              currentGun:
-                player.currentGun,
-
-              position:
-                player.position,
-
-              rotation:
-                player.rotation
-            }
+            stateFor(player)
           );
 
           return;
@@ -876,26 +756,23 @@ io.on(
               /[^\w\- ]/g,
               ""
             )
-            .slice(
-              0,
-              16
-            );
+            .slice(0, 16);
 
         if (!username) {
           username =
-            `Player${Math.floor(
+            "Player" +
+            Math.floor(
               Math.random() *
                 9000 +
                 1000
-            )}`;
+            );
         }
 
         const spawn =
           getSpawnPoint();
 
         player = {
-          id:
-            socket.id,
+          id: socket.id,
 
           username,
 
@@ -903,7 +780,11 @@ io.on(
 
           score: 0,
 
-          coins: 0,
+          /* Give new players coins
+             so the shop can actually
+             be tested immediately. */
+
+          coins: 100,
 
           ownedGuns: {
             pistol: true
@@ -913,14 +794,7 @@ io.on(
             "pistol",
 
           position: {
-            x:
-              spawn.x,
-
-            y:
-              spawn.y,
-
-            z:
-              spawn.z
+            ...spawn
           },
 
           rotation: {
@@ -929,8 +803,7 @@ io.on(
             z: 0
           },
 
-          lastShot:
-            0,
+          lastShot: 0,
 
           alive: true
         };
@@ -942,48 +815,19 @@ io.on(
 
         socket.emit(
           "joinAccepted",
-          {
-            id:
-              player.id,
-
-            username:
-              player.username,
-
-            health:
-              player.health,
-
-            score:
-              player.score,
-
-            coins:
-              player.coins,
-
-            ownedGuns:
-              player.ownedGuns,
-
-            currentGun:
-              player.currentGun,
-
-            position:
-              player.position,
-
-            rotation:
-              player.rotation
-          }
+          stateFor(player)
         );
 
         socket.emit(
           "existingPlayers",
-          getPlayersArray(
+          allPlayers(
             socket.id
           )
         );
 
         socket.broadcast.emit(
           "playerJoined",
-          playerSnapshot(
-            player
-          )
+          snapshot(player)
         );
 
         io.emit(
@@ -997,137 +841,106 @@ io.on(
       }
     );
 
-    /* ==================================================
-       PLAYER MOVE
-    ================================================== */
+    /* MOVEMENT */
 
     socket.on(
       "playerMove",
-      (data) => {
+      data => {
         const player =
           players.get(
             socket.id
           );
 
-        if (!player) {
-          return;
-        }
-
         if (
-          !player.alive
-        ) {
-          return;
-        }
-
-        if (
+          !player ||
+          !player.alive ||
           !data?.position
         ) {
           return;
         }
 
-        const x =
-          clamp(
+        const next = {
+          x: clamp(
             safeNumber(
               data.position.x,
               player.position.x
             ),
             -58,
             58
-          );
+          ),
 
-        const y =
-          clamp(
+          y: clamp(
             safeNumber(
               data.position.y,
               player.position.y
             ),
-            1.1,
+            2.1,
             6
-          );
+          ),
 
-        const z =
-          clamp(
+          z: clamp(
             safeNumber(
               data.position.z,
               player.position.z
             ),
             -58,
             58
-          );
-
-        const newPosition = {
-          x,
-          y,
-          z
+          )
         };
 
-        /*
-          Server validates destination to stop
-          impossible movement through obstacles.
-        */
-
         const dx =
-          newPosition.x -
+          next.x -
           player.position.x;
 
         const dz =
-          newPosition.z -
+          next.z -
           player.position.z;
 
-        const maxStep =
-          2.2;
+        /* Prevent teleporting */
 
         if (
           Math.abs(dx) >
-            maxStep ||
+            2.2 ||
           Math.abs(dz) >
-            maxStep
+            2.2
         ) {
           return;
         }
 
         if (
           !positionCollides(
-            newPosition
+            next
           )
         ) {
           player.position =
-            newPosition;
+            next;
         }
 
         if (
           data.rotation
         ) {
           player.rotation = {
-            x:
-              clamp(
-                safeNumber(
-                  data.rotation.x,
-                  0
-                ),
-                -1.55,
-                1.55
-              ),
-
-            y:
+            x: clamp(
               safeNumber(
-                data.rotation.y,
-                0
+                data.rotation.x,
+                player.rotation.x
               ),
+              -1.55,
+              1.55
+            ),
 
-            z:
-              safeNumber(
-                data.rotation.z,
-                0
-              )
+            y: safeNumber(
+              data.rotation.y,
+              player.rotation.y
+            ),
+
+            z: 0
           };
         }
 
         socket.broadcast.emit(
           "playerMoved",
-          playerSnapshot(
-            player
-          )
+          snapshot(player)
         );
       }
     );
@@ -1138,23 +951,15 @@ io.on(
 
     socket.on(
       "shoot",
-      (data) => {
+      data => {
         const shooter =
           players.get(
             socket.id
           );
 
-        if (!shooter) {
-          return;
-        }
-
         if (
-          !shooter.alive
-        ) {
-          return;
-        }
-
-        if (
+          !shooter ||
+          !shooter.alive ||
           !data?.origin ||
           !data?.direction
         ) {
@@ -1162,9 +967,7 @@ io.on(
         }
 
         const gunId =
-          GUNS[
-            data.gunId
-          ]
+          GUNS[data.gunId]
             ? data.gunId
             : "pistol";
 
@@ -1193,210 +996,80 @@ io.on(
         shooter.lastShot =
           now;
 
-        const origin = {
-          x:
-            safeNumber(
-              data.origin.x,
-              shooter.position.x
-            ),
+        let origin = {
+          x: safeNumber(
+            data.origin.x,
+            shooter.position.x
+          ),
 
-          y:
-            safeNumber(
-              data.origin.y,
-              shooter.position.y
-            ),
+          y: safeNumber(
+            data.origin.y,
+            shooter.position.y +
+              1.2
+          ),
 
-          z:
-            safeNumber(
-              data.origin.z,
-              shooter.position.z
-            )
+          z: safeNumber(
+            data.origin.z,
+            shooter.position.z
+          )
         };
 
-        let dx =
-          safeNumber(
-            data.direction.x,
-            0
-          );
+        /*
+          Don't trust a wildly
+          distant client origin.
+        */
 
-        let dy =
-          safeNumber(
-            data.direction.y,
-            0
-          );
-
-        let dz =
-          safeNumber(
-            data.direction.z,
-            -1
-          );
-
-        const length =
+        const originDistance =
           Math.sqrt(
-            dx * dx +
-            dy * dy +
-            dz * dz
+            Math.pow(
+              origin.x -
+                shooter.position.x,
+              2
+            ) +
+            Math.pow(
+              origin.y -
+                shooter.position.y,
+              2
+            ) +
+            Math.pow(
+              origin.z -
+                shooter.position.z,
+              2
+            )
           );
 
         if (
-          !Number.isFinite(
-            length
-          ) ||
-          length <
-            0.000001
+          originDistance > 4
         ) {
-          return;
+          origin = {
+            x: shooter.position.x,
+
+            y:
+              shooter.position.y +
+              1.4,
+
+            z: shooter.position.z
+          };
         }
 
-        dx /= length;
-        dy /= length;
-        dz /= length;
-
-        const direction = {
-          x: dx,
-          y: dy,
-          z: dz
-        };
-
-        const wallDistance =
-          nearestWallDistance(
-            origin,
-            direction,
-            120
+        const direction =
+          normalize(
+            safeNumber(
+              data.direction.x
+            ),
+            safeNumber(
+              data.direction.y
+            ),
+            safeNumber(
+              data.direction.z
+            )
           );
 
-        let closestTarget =
-          null;
+        if (!direction)
+          return;
 
-        let closestDistance =
-          wallDistance;
-
-        /* ==============================================
-           FIND PLAYER HIT
-        ============================================== */
-
-        for (
-          const target of
-          players.values()
-        ) {
-          if (
-            target.id ===
-              shooter.id ||
-            !target.alive ||
-            target.health <= 0
-          ) {
-            continue;
-          }
-
-          const headPoint = {
-            x:
-              target.position.x,
-
-            y:
-              target.position.y +
-              1.0,
-
-            z:
-              target.position.z
-          };
-
-          const bodyPoint = {
-            x:
-              target.position.x,
-
-            y:
-              target.position.y +
-              0.25,
-
-            z:
-              target.position.z
-          };
-
-          const headDistance =
-            distancePointToRay(
-              headPoint,
-              origin,
-              direction
-            );
-
-          const bodyDistance =
-            distancePointToRay(
-              bodyPoint,
-              origin,
-              direction
-            );
-
-          const hitRadius =
-            0.95;
-
-          let hitDistance =
-            Infinity;
-
-          if (
-            headDistance <
-            hitRadius
-          ) {
-            hitDistance =
-              Math.sqrt(
-                Math.pow(
-                  headPoint.x -
-                    origin.x,
-                  2
-                ) +
-                  Math.pow(
-                    headPoint.y -
-                      origin.y,
-                    2
-                  ) +
-                  Math.pow(
-                    headPoint.z -
-                      origin.z,
-                    2
-                  )
-              );
-          }
-
-          if (
-            bodyDistance <
-              hitRadius &&
-            bodyDistance <
-              hitDistance
-          ) {
-            hitDistance =
-              Math.sqrt(
-                Math.pow(
-                  bodyPoint.x -
-                    origin.x,
-                  2
-                ) +
-                  Math.pow(
-                    bodyPoint.y -
-                      origin.y,
-                    2
-                  ) +
-                  Math.pow(
-                    bodyPoint.z -
-                      origin.z,
-                    2
-                  )
-              );
-          }
-
-          if (
-            hitDistance <
-            closestDistance
-          ) {
-            closestDistance =
-              hitDistance;
-
-            closestTarget =
-              target;
-          }
-        }
-
-        /* ==============================================
-           SHOOT EVENT FOR OTHER CLIENTS
-        ============================================== */
+        /* Tell everyone else about
+           the shot for visuals. */
 
         socket.broadcast.emit(
           "playerShot",
@@ -1412,39 +1085,150 @@ io.on(
           }
         );
 
-        /* ==============================================
-           APPLY DAMAGE
-        ============================================== */
+        /* Wall distance */
 
-        if (
-          !closestTarget
+        const wallDistance =
+          nearestWallDistance(
+            origin,
+            direction,
+            120
+          );
+
+        let target = null;
+        let targetDistance =
+          wallDistance;
+
+        /* Hit detection */
+
+        for (
+          const candidate
+          of players.values()
         ) {
-          return;
+          if (
+            candidate.id ===
+              shooter.id ||
+            !candidate.alive ||
+            candidate.health <= 0
+          ) {
+            continue;
+          }
+
+          const head = {
+            x:
+              candidate.position.x,
+
+            y:
+              candidate.position.y +
+              1.65,
+
+            z:
+              candidate.position.z
+          };
+
+          const body = {
+            x:
+              candidate.position.x,
+
+            y:
+              candidate.position.y +
+              0.9,
+
+            z:
+              candidate.position.z
+          };
+
+          const headHit =
+            raySphere(
+              origin,
+              direction,
+              head,
+              0.43
+            );
+
+          const bodyHit =
+            raySphere(
+              origin,
+              direction,
+              body,
+              0.7
+            );
+
+          let hitDistance =
+            Infinity;
+
+          let damage =
+            weapon.damage;
+
+          if (
+            headHit !== null
+          ) {
+            hitDistance =
+              headHit;
+
+            damage =
+              Math.round(
+                weapon.damage *
+                  1.5
+              );
+          }
+
+          if (
+            bodyHit !== null &&
+            bodyHit <
+              hitDistance
+          ) {
+            hitDistance =
+              bodyHit;
+
+            damage =
+              weapon.damage;
+          }
+
+          if (
+            hitDistance <
+            targetDistance
+          ) {
+            targetDistance =
+              hitDistance;
+
+            target =
+              candidate;
+
+            target.__pendingDamage =
+              damage;
+          }
         }
 
-        closestTarget.health =
+        if (!target)
+          return;
+
+        const damage =
+          target.__pendingDamage ||
+          weapon.damage;
+
+        delete target.__pendingDamage;
+
+        target.health =
           Math.max(
             0,
-            closestTarget.health -
-              weapon.damage
+            target.health -
+              damage
           );
 
         const targetSocket =
           io.sockets.sockets.get(
-            closestTarget.id
+            target.id
           );
 
-        if (
-          targetSocket
-        ) {
+        if (targetSocket) {
           targetSocket.emit(
             "playerHit",
             {
               targetId:
-                closestTarget.id,
+                target.id,
 
               health:
-                closestTarget.health,
+                target.health,
 
               attackerId:
                 shooter.id,
@@ -1455,36 +1239,23 @@ io.on(
           );
         }
 
-        socket.emit(
-          "scoreUpdate",
-          {
-            id:
-              shooter.id,
-
-            score:
-              shooter.score
-          }
-        );
-
         io.emit(
           "playerMoved",
-          playerSnapshot(
-            closestTarget
-          )
+          snapshot(target)
         );
 
-        /* ==============================================
-           ELIMINATION
-        ============================================== */
+        /* ELIMINATION */
 
         if (
-          closestTarget.health <= 0
+          target.health <= 0
         ) {
-          closestTarget.alive =
+          target.alive =
             false;
 
-          shooter.score += 1;
-          shooter.coins += 10;
+          shooter.score++;
+
+          shooter.coins +=
+            10;
 
           socket.emit(
             "scoreUpdate",
@@ -1518,23 +1289,24 @@ io.on(
                 shooter.username,
 
               targetId:
-                closestTarget.id,
+                target.id,
 
               targetName:
-                closestTarget.username
+                target.username
             }
           );
+
+          /* Respawn */
 
           setTimeout(
             () => {
               const current =
                 players.get(
-                  closestTarget.id
+                  target.id
                 );
 
-              if (!current) {
+              if (!current)
                 return;
-              }
 
               const spawn =
                 getSpawnPoint();
@@ -1545,24 +1317,15 @@ io.on(
               current.alive =
                 true;
 
-              current.position =
-                {
-                  x:
-                    spawn.x,
+              current.position = {
+                ...spawn
+              };
 
-                  y:
-                    spawn.y,
-
-                  z:
-                    spawn.z
-                };
-
-              current.rotation =
-                {
-                  x: 0,
-                  y: 0,
-                  z: 0
-                };
+              current.rotation = {
+                x: 0,
+                y: 0,
+                z: 0
+              };
 
               const victimSocket =
                 io.sockets.sockets.get(
@@ -1578,8 +1341,7 @@ io.on(
                     id:
                       current.id,
 
-                    health:
-                      current.health,
+                    health: 100,
 
                     position:
                       current.position
@@ -1589,7 +1351,7 @@ io.on(
 
               io.emit(
                 "playerMoved",
-                playerSnapshot(
+                snapshot(
                   current
                 )
               );
@@ -1606,20 +1368,19 @@ io.on(
 
     socket.on(
       "buyGun",
-      (gunId) => {
+      gunId => {
         const player =
           players.get(
             socket.id
           );
 
-        if (!player) {
-          return;
-        }
-
-        const gun =
+        const weapon =
           GUNS[gunId];
 
-        if (!gun) {
+        if (
+          !player ||
+          !weapon
+        ) {
           return;
         }
 
@@ -1633,7 +1394,7 @@ io.on(
 
         if (
           player.coins <
-          gun.price
+          weapon.price
         ) {
           socket.emit(
             "gunPurchaseFailed",
@@ -1647,7 +1408,7 @@ io.on(
         }
 
         player.coins -=
-          gun.price;
+          weapon.price;
 
         player.ownedGuns[
           gunId
@@ -1680,10 +1441,6 @@ io.on(
               player.coins
           }
         );
-
-        console.log(
-          `${player.username} bought ${gun.name}`
-        );
       }
     );
 
@@ -1693,23 +1450,15 @@ io.on(
 
     socket.on(
       "equipGun",
-      (gunId) => {
+      gunId => {
         const player =
           players.get(
             socket.id
           );
 
-        if (!player) {
-          return;
-        }
-
         if (
-          !GUNS[gunId]
-        ) {
-          return;
-        }
-
-        if (
+          !player ||
+          !GUNS[gunId] ||
           !player.ownedGuns[
             gunId
           ]
@@ -1730,10 +1479,6 @@ io.on(
               player.currentGun
           }
         );
-
-        console.log(
-          `${player.username} equipped ${gunId}`
-        );
       }
     );
 
@@ -1743,7 +1488,7 @@ io.on(
 
     socket.on(
       "disconnect",
-      (reason) => {
+      reason => {
         const player =
           players.get(
             socket.id
@@ -1752,10 +1497,6 @@ io.on(
         if (player) {
           console.log(
             `${player.username} disconnected: ${reason}`
-          );
-        } else {
-          console.log(
-            `Player disconnected: ${socket.id}`
           );
         }
 
