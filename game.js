@@ -24,37 +24,7 @@ const gunValue = $("gunValue");
 
 const startOverlay = $("startOverlay");
 const playButton = $("playButton");
-const firstPersonButton =
-  $("firstPersonButton");
 
-const thirdPersonButton =
-  $("thirdPersonButton");firstPersonButton.addEventListener(
-  "click",
-  event => {
-    event.stopPropagation();
-
-    cameraMode = "first";
-
-    firstPersonButton.classList.add("active");
-    thirdPersonButton.classList.remove("active");
-
-    applyGunVisual();
-  }
-);
-
-thirdPersonButton.addEventListener(
-  "click",
-  event => {
-    event.stopPropagation();
-
-    cameraMode = "third";
-
-    thirdPersonButton.classList.add("active");
-    firstPersonButton.classList.remove("active");
-
-    applyGunVisual();
-  }
-);
 const usernameInput = $("usernameInput");
 const statusText = $("statusText");
 
@@ -1958,104 +1928,187 @@ function collides(
   return false;
 }
 
+/* ---------- MOVEMENT ---------- */
+
 function updateMovement(delta) {
 
   if (
     !controls.isLocked ||
     !playerJoined ||
     isShopOpen
-  ) return;
+  ) {
+    return;
+  }
 
-  const dir = new THREE.Vector3();
+  const dir =
+    new THREE.Vector3();
 
-  // WASD
-  if (movement.forward)  dir.z -= 1; // W = forward
-  if (movement.backward) dir.z += 1; // S = backward
-  if (movement.left)     dir.x -= 1; // A = left
-  if (movement.right)    dir.x += 1; // D = right
+  if (movement.forward) {
+    dir.z -= 1;
+  }
+
+  if (movement.backward) {
+    dir.z += 1;
+  }
+
+  if (movement.left) {
+    dir.x -= 1;
+  }
+
+  if (movement.right) {
+    dir.x += 1;
+  }
 
   if (dir.lengthSq() > 0) {
 
     dir.normalize();
 
-    // Convert local movement to world movement
-    const sinYaw = Math.sin(yaw);
-    const cosYaw = Math.cos(yaw);
+    const sy =
+      Math.sin(yaw);
+
+    const cy =
+      Math.cos(yaw);
 
     const worldX =
-      dir.x * cosYaw -
-      dir.z * sinYaw;
+  dir.x * cy +
+  dir.z * sy;
 
-    const worldZ =
-      dir.x * sinYaw +
-      dir.z * cosYaw;
+const worldZ =
+  -dir.x * sy +
+  dir.z * cy;
 
-    const speed =
+    let speed =
       movement.sprint
         ? 28
         : (isCrouched ? 10 : 19);
 
     const step =
-      speed * delta;
+      delta * speed;
 
-    // X collision
-    const nextX =
+    /*
+      X movement
+    */
+
+    const nx =
       playerPosition.clone();
 
-    nextX.x += worldX * step;
+    nx.x +=
+      worldX * step;
 
-    if (!collides(nextX)) {
-      playerPosition.x = nextX.x;
+    if (!collides(nx)) {
+      playerPosition.x =
+        nx.x;
     }
 
-    // Z collision
-    const nextZ =
+    /*
+      Z movement
+    */
+
+    const nz =
       playerPosition.clone();
 
-    nextZ.z += worldZ * step;
+    nz.z +=
+      worldZ * step;
 
-    if (!collides(nextZ)) {
-      playerPosition.z = nextZ.z;
+    if (!collides(nz)) {
+      playerPosition.z =
+        nz.z;
     }
   }
 
-  // Gravity
-  verticalVelocity -= 28 * delta;
+  /*
+    CROUCH
+  */
+
+  if (
+    movement.crouch &&
+    isGrounded
+  ) {
+
+    isCrouched =
+      true;
+
+  } else if (
+    !movement.crouch
+  ) {
+
+    isCrouched =
+      false;
+  }
+
+  /*
+    GRAVITY
+  */
+
+  verticalVelocity -=
+    28 * delta;
 
   playerPosition.y +=
     verticalVelocity * delta;
 
-  if (playerPosition.y <= 2.1) {
+  /*
+    GROUND
+  */
 
-    playerPosition.y = 2.1;
-    verticalVelocity = 0;
-    isGrounded = true;
+  if (
+    playerPosition.y <= 2.1
+  ) {
+
+    playerPosition.y =
+      2.1;
+
+    verticalVelocity =
+      0;
+
+    isGrounded =
+      true;
 
   } else {
 
-    isGrounded = false;
+    isGrounded =
+      false;
   }
 
-  // Network update
-  networkTimer += delta;
+  /*
+    SEND POSITION TO SERVER
+  */
 
-  if (networkTimer >= 0.05) {
+  networkTimer +=
+    delta;
 
-    networkTimer = 0;
+  if (
+    networkTimer >= 0.05
+  ) {
 
-    socket.emit("playerMove", {
-      position: {
-        x: playerPosition.x,
-        y: playerPosition.y,
-        z: playerPosition.z
-      },
+    networkTimer =
+      0;
 
-      rotation: {
-        x: pitch,
-        y: yaw,
-        z: 0
+    socket.emit(
+      "playerMove",
+      {
+        position: {
+          x:
+            playerPosition.x,
+
+          y:
+            playerPosition.y,
+
+          z:
+            playerPosition.z
+        },
+
+        rotation: {
+          x:
+            pitch,
+
+          y:
+            yaw,
+
+          z:
+            0
+        }
       }
-    });
+    );
   }
 }
 
