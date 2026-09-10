@@ -24,6 +24,37 @@ const gunValue = $("gunValue");
 
 const startOverlay = $("startOverlay");
 const playButton = $("playButton");
+const firstPersonButton =
+  $("firstPersonButton");
+
+const thirdPersonButton =
+  $("thirdPersonButton");firstPersonButton.addEventListener(
+  "click",
+  event => {
+    event.stopPropagation();
+
+    cameraMode = "first";
+
+    firstPersonButton.classList.add("active");
+    thirdPersonButton.classList.remove("active");
+
+    applyGunVisual();
+  }
+);
+
+thirdPersonButton.addEventListener(
+  "click",
+  event => {
+    event.stopPropagation();
+
+    cameraMode = "third";
+
+    thirdPersonButton.classList.add("active");
+    firstPersonButton.classList.remove("active");
+
+    applyGunVisual();
+  }
+);
 const usernameInput = $("usernameInput");
 const statusText = $("statusText");
 
@@ -244,6 +275,11 @@ const controls =
     camera,
     renderer.domElement
   );
+
+  controls.addEventListener("change", () => {
+  yaw = camera.rotation.y;
+  pitch = camera.rotation.x;
+});
 
 /* ======================================================
    LIGHTING
@@ -1671,7 +1707,7 @@ const gunBody =
 gunBody.position.set(
   0,
   0,
-  -0.35
+  -0.42
 );
 
 gun.add(gunBody);
@@ -1763,9 +1799,9 @@ muzzlePoint.add(
 
 const gunBasePosition =
   new THREE.Vector3(
-    0.5,
-    -0.38,
-    -0.82
+    0.48,
+    -0.32,
+    -0.72
   );
 
 let gunRecoil = 0;
@@ -2083,52 +2119,76 @@ function updateMovement(
 function updateCamera() {
   if (!playerJoined) return;
 
-  if (
-    cameraMode === "first"
-  ) {
+  if (cameraMode === "first") {
     camera.position.set(
       playerPosition.x,
       playerPosition.y,
       playerPosition.z
     );
 
-    controls.addEventListener("change", () => {
-  yaw = camera.rotation.y;
-  pitch = camera.rotation.x;
-});
-
     gun.visible = true;
-  } else {
-    const back =
-      new THREE.Vector3(
-        Math.sin(yaw),
-        0,
-        Math.cos(yaw)
-      );
+    return;
+  }
 
-    const desired =
-      playerPosition.clone();
+  // THIRD PERSON
+  const cameraDistance = 3.5;
 
-    desired.y +=
-      isCrouched
-        ? 2.1
-        : 2.65;
+  const behind = new THREE.Vector3(
+    Math.sin(yaw),
+    0,
+    Math.cos(yaw)
+  );
 
-    desired.x +=
-      back.x * 3.5;
+  const desired = new THREE.Vector3(
+    playerPosition.x + behind.x * cameraDistance,
+    playerPosition.y + 1.7,
+    playerPosition.z + behind.z * cameraDistance
+  );
 
-    desired.z +=
-      back.z * 3.5;
+  // Keep camera from going underground
+  desired.y = Math.max(desired.y, 1.8);
 
-    camera.position.lerp(
-      desired,
-      0.2
+  camera.position.lerp(
+    desired,
+    0.18
+  );
+
+  // Keep the camera looking where the player is aiming
+  const lookTarget = new THREE.Vector3(
+    playerPosition.x,
+    playerPosition.y + 1.35,
+    playerPosition.z
+  );
+
+  const lookDirection =
+    new THREE.Vector3()
+      .subVectors(
+        lookTarget,
+        camera.position
+      )
+      .normalize();
+
+  const targetYaw =
+    Math.atan2(
+      -lookDirection.x,
+      -lookDirection.z
     );
 
-    
+  const targetPitch =
+    Math.asin(
+      THREE.MathUtils.clamp(
+        lookDirection.y,
+        -1,
+        1
+      )
+    );
 
-    gun.visible = false;
-  }
+  camera.rotation.order = "YXZ";
+
+  camera.rotation.y = yaw;
+  camera.rotation.x = pitch;
+
+  gun.visible = false;
 }
 
 /* ======================================================
@@ -2149,6 +2209,14 @@ function toggleCameraMode() {
       : "first";
 
   applyGunVisual();
+  
+  const localAvatar =
+  otherPlayers.get(localPlayerId);
+
+if (localAvatar) {
+  localAvatar.visible =
+    cameraMode === "third";
+}
 
   addFeed(
     "CAMERA",
@@ -2250,22 +2318,27 @@ function shoot() {
   const origin =
     new THREE.Vector3();
 
-  if (
-    cameraMode === "first"
-  ) {
-    origin.copy(
-      camera.position
-    );
-  } else {
-    origin.copy(
-      playerPosition
-    );
+ if (cameraMode === "first") {
+  // First-person: fire from the camera/gun
+  origin.copy(camera.position);
 
-    origin.y +=
-      isCrouched
-        ? 1.3
-        : 1.7;
-  }
+  const muzzleWorld =
+    new THREE.Vector3();
+
+  muzzlePoint.getWorldPosition(
+    muzzleWorld
+  );
+
+  origin.copy(muzzleWorld);
+} else {
+  // Third-person: fire from the player's chest/gun height
+  origin.set(
+    playerPosition.x,
+    playerPosition.y +
+      (isCrouched ? 1.15 : 1.45),
+    playerPosition.z
+  );
+}
 
   socket.emit(
     "shoot",
@@ -3206,6 +3279,50 @@ controls.addEventListener(
   }
 );
 
+function showDeathScreen() {
+  const oldTitle =
+    startOverlay.querySelector("#startPanel h1");
+
+  if (oldTitle) {
+    oldTitle.textContent =
+      "YOU DIED";
+  }
+
+  startOverlay.style.display =
+    "flex";
+
+  playButton.style.display =
+    "none";
+
+  usernameInput.style.display =
+    "none";
+
+  statusText.textContent =
+    "Respawning...";
+}
+
+function hideDeathScreen() {
+  const oldTitle =
+    startOverlay.querySelector("#startPanel h1");
+
+  if (oldTitle) {
+    oldTitle.textContent =
+      "NEON STRIKE";
+  }
+
+  startOverlay.style.display =
+    "none";
+
+  playButton.style.display =
+    "";
+
+  usernameInput.style.display =
+    "";
+
+  statusText.textContent =
+    "Connected";
+}
+
 /* ======================================================
    SOCKET EVENTS
 ====================================================== */
@@ -3604,26 +3721,24 @@ socket.on(
     }
 
     if (
-      data.targetId ===
-      localPlayerId
-    ) {
-      health = 0;
+  data.targetId ===
+  localPlayerId
+) {
+  health = 0;
 
-      updateHUD();
+  updateHUD();
 
-      controls.unlock();
+  firing = false;
+  isAiming = false;
+  isReloading = false;
 
-      startOverlay.style.display =
-        "flex";
+  showDeathScreen();
 
-      playButton.textContent =
-        "WAITING...";
-
-      statusText.textContent =
-        "You were eliminated!";
-    }
+  if (controls.isLocked) {
+    controls.unlock();
   }
-);
+}
+});
 
 socket.on(
   "respawn",
@@ -3652,14 +3767,14 @@ socket.on(
 
     updateHUD();
 
-    startOverlay.style.display =
-      "flex";
+    hideDeathScreen();
 
-    playButton.textContent =
-      "PLAY";
+applyGunVisual();
+updateHUD();
 
-    statusText.textContent =
-      "Respawned — click PLAY";
+if (!controls.isLocked) {
+  controls.lock();
+}
   }
 );
 
