@@ -1958,187 +1958,104 @@ function collides(
   return false;
 }
 
-/* ---------- MOVEMENT ---------- */
-
 function updateMovement(delta) {
 
   if (
     !controls.isLocked ||
     !playerJoined ||
     isShopOpen
-  ) {
-    return;
-  }
+  ) return;
 
-  const dir =
-    new THREE.Vector3();
+  const dir = new THREE.Vector3();
 
-  if (movement.forward) {
-    dir.z -= 1;
-  }
-
-  if (movement.backward) {
-    dir.z += 1;
-  }
-
-  if (movement.left) {
-    dir.x -= 1;
-  }
-
-  if (movement.right) {
-    dir.x += 1;
-  }
+  // WASD
+  if (movement.forward)  dir.z -= 1; // W = forward
+  if (movement.backward) dir.z += 1; // S = backward
+  if (movement.left)     dir.x -= 1; // A = left
+  if (movement.right)    dir.x += 1; // D = right
 
   if (dir.lengthSq() > 0) {
 
     dir.normalize();
 
-    const sy =
-      Math.sin(yaw);
-
-    const cy =
-      Math.cos(yaw);
+    // Convert local movement to world movement
+    const sinYaw = Math.sin(yaw);
+    const cosYaw = Math.cos(yaw);
 
     const worldX =
-      dir.x * cy -
-      dir.z * sy;
+      dir.x * cosYaw -
+      dir.z * sinYaw;
 
     const worldZ =
-      dir.x * sy +
-      dir.z * cy;
+      dir.x * sinYaw +
+      dir.z * cosYaw;
 
-    let speed =
+    const speed =
       movement.sprint
         ? 28
         : (isCrouched ? 10 : 19);
 
     const step =
-      delta * speed;
+      speed * delta;
 
-    /*
-      X movement
-    */
-
-    const nx =
+    // X collision
+    const nextX =
       playerPosition.clone();
 
-    nx.x +=
-      worldX * step;
+    nextX.x += worldX * step;
 
-    if (!collides(nx)) {
-      playerPosition.x =
-        nx.x;
+    if (!collides(nextX)) {
+      playerPosition.x = nextX.x;
     }
 
-    /*
-      Z movement
-    */
-
-    const nz =
+    // Z collision
+    const nextZ =
       playerPosition.clone();
 
-    nz.z +=
-      worldZ * step;
+    nextZ.z += worldZ * step;
 
-    if (!collides(nz)) {
-      playerPosition.z =
-        nz.z;
+    if (!collides(nextZ)) {
+      playerPosition.z = nextZ.z;
     }
   }
 
-  /*
-    CROUCH
-  */
-
-  if (
-    movement.crouch &&
-    isGrounded
-  ) {
-
-    isCrouched =
-      true;
-
-  } else if (
-    !movement.crouch
-  ) {
-
-    isCrouched =
-      false;
-  }
-
-  /*
-    GRAVITY
-  */
-
-  verticalVelocity -=
-    28 * delta;
+  // Gravity
+  verticalVelocity -= 28 * delta;
 
   playerPosition.y +=
     verticalVelocity * delta;
 
-  /*
-    GROUND
-  */
+  if (playerPosition.y <= 2.1) {
 
-  if (
-    playerPosition.y <= 2.1
-  ) {
-
-    playerPosition.y =
-      2.1;
-
-    verticalVelocity =
-      0;
-
-    isGrounded =
-      true;
+    playerPosition.y = 2.1;
+    verticalVelocity = 0;
+    isGrounded = true;
 
   } else {
 
-    isGrounded =
-      false;
+    isGrounded = false;
   }
 
-  /*
-    SEND POSITION TO SERVER
-  */
+  // Network update
+  networkTimer += delta;
 
-  networkTimer +=
-    delta;
+  if (networkTimer >= 0.05) {
 
-  if (
-    networkTimer >= 0.05
-  ) {
+    networkTimer = 0;
 
-    networkTimer =
-      0;
+    socket.emit("playerMove", {
+      position: {
+        x: playerPosition.x,
+        y: playerPosition.y,
+        z: playerPosition.z
+      },
 
-    socket.emit(
-      "playerMove",
-      {
-        position: {
-          x:
-            playerPosition.x,
-
-          y:
-            playerPosition.y,
-
-          z:
-            playerPosition.z
-        },
-
-        rotation: {
-          x:
-            pitch,
-
-          y:
-            yaw,
-
-          z:
-            0
-        }
+      rotation: {
+        x: pitch,
+        y: yaw,
+        z: 0
       }
-    );
+    });
   }
 }
 
