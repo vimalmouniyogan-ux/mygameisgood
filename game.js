@@ -100,6 +100,27 @@ const movement = {
   crouch: false
 };
 
+// ===============================
+// MOVEMENT SETTINGS
+// ===============================
+
+const WALK_SPEED = 19;
+const SPRINT_SPEED = 30;
+const CROUCH_SPEED = 9;
+
+const STAND_HEIGHT = 2.1;
+const CROUCH_HEIGHT = 1.25;
+
+// Energy system
+const MAX_ENERGY = 100;
+let energy = MAX_ENERGY;
+
+const SPRINT_DRAIN = 28;     // energy per second
+const ENERGY_REGEN = 20;     // energy per second
+const REGEN_DELAY = 0.8;
+
+let sprintRegenTimer = 0;
+
 /* ======================================================
    WEAPONS
 ====================================================== */
@@ -1928,8 +1949,6 @@ function collides(
   return false;
 }
 
-/* ---------- MOVEMENT ---------- */
-
 function updateMovement(delta) {
 
   if (
@@ -1940,75 +1959,155 @@ function updateMovement(delta) {
     return;
   }
 
+  // =========================================
+  // CROUCH
+  // =========================================
+
+  if (movement.crouch && isGrounded) {
+    isCrouched = true;
+  } else if (!movement.crouch) {
+    isCrouched = false;
+  }
+
+  // =========================================
+  // ENERGY
+  // =========================================
+
+  const wantsToSprint =
+    movement.sprint &&
+    !isCrouched &&
+    (movement.forward ||
+     movement.backward ||
+     movement.left ||
+     movement.right);
+
+  let actuallySprinting = false;
+
+  if (wantsToSprint && energy > 0) {
+
+    actuallySprinting = true;
+
+    energy -=
+      SPRINT_DRAIN * delta;
+
+    sprintRegenTimer =
+      REGEN_DELAY;
+
+    if (energy <= 0) {
+      energy = 0;
+      actuallySprinting = false;
+    }
+
+  } else {
+
+    if (sprintRegenTimer > 0) {
+      sprintRegenTimer -= delta;
+    } else {
+
+      energy +=
+        ENERGY_REGEN * delta;
+
+      if (energy > MAX_ENERGY) {
+        energy = MAX_ENERGY;
+      }
+    }
+  }
+
+  // =========================================
+  // PROPER WASD
+  // =========================================
+
   const dir =
     new THREE.Vector3();
 
-  if (movement.forward) {
+  if (movement.forward)
     dir.z -= 1;
-  }
 
-  if (movement.backward) {
+  if (movement.backward)
     dir.z += 1;
-  }
 
-  if (movement.left) {
+  if (movement.left)
     dir.x -= 1;
-  }
 
-  if (movement.right) {
+  if (movement.right)
     dir.x += 1;
-  }
 
   if (dir.lengthSq() > 0) {
 
     dir.normalize();
 
-    const sy =
-      Math.sin(yaw);
+    // Get EXACT direction the camera is facing
+    const forward =
+      new THREE.Vector3();
 
-    const cy =
-      Math.cos(yaw);
+    camera.getWorldDirection(
+      forward
+    );
 
-    const worldX =
-  dir.x * cy +
-  dir.z * sy;
+    // Ignore looking up/down
+    forward.y = 0;
+    forward.normalize();
 
-const worldZ =
-  -dir.x * sy +
-  dir.z * cy;
+    // Camera's right direction
+    const right =
+      new THREE.Vector3(
+        -forward.z,
+        0,
+        forward.x
+      );
 
-    let speed =
-      movement.sprint
-        ? 28
-        : (isCrouched ? 10 : 19);
+    const moveDirection =
+      new THREE.Vector3();
+
+    // W/S
+    moveDirection.addScaledVector(
+      forward,
+      -dir.z
+    );
+
+    // A/D
+    moveDirection.addScaledVector(
+      right,
+      dir.x
+    );
+
+    moveDirection.normalize();
+
+    // =========================================
+    // SPEED
+    // =========================================
+
+    let speed;
+
+    if (isCrouched) {
+      speed = CROUCH_SPEED;
+    } else if (actuallySprinting) {
+      speed = SPRINT_SPEED;
+    } else {
+      speed = WALK_SPEED;
+    }
 
     const step =
-      delta * speed;
+      speed * delta;
 
-    /*
-      X movement
-    */
-
+    // X collision
     const nx =
       playerPosition.clone();
 
     nx.x +=
-      worldX * step;
+      moveDirection.x * step;
 
     if (!collides(nx)) {
       playerPosition.x =
         nx.x;
     }
 
-    /*
-      Z movement
-    */
-
+    // Z collision
     const nz =
       playerPosition.clone();
 
     nz.z +=
-      worldZ * step;
+      moveDirection.z * step;
 
     if (!collides(nz)) {
       playerPosition.z =
@@ -2016,29 +2115,30 @@ const worldZ =
     }
   }
 
-  /*
-    CROUCH
-  */
+  // =========================================
+  // CROUCH / STANDING HEIGHT
+  // =========================================
 
-  if (
-    movement.crouch &&
-    isGrounded
-  ) {
+  const targetHeight =
+    isCrouched
+      ? CROUCH_HEIGHT
+      : STAND_HEIGHT;
 
-    isCrouched =
-      true;
+  if (isGrounded) {
 
-  } else if (
-    !movement.crouch
-  ) {
+    playerPosition.y =
+      THREE.MathUtils.lerp(
+        playerPosition.y,
+        targetHeight,
+        Math.min(1, delta * 14)
+      );
 
-    isCrouched =
-      false;
+    verticalVelocity = 0;
   }
 
-  /*
-    GRAVITY
-  */
+  // =========================================
+  // GRAVITY
+  // =========================================
 
   verticalVelocity -=
     28 * delta;
@@ -2046,112 +2146,164 @@ const worldZ =
   playerPosition.y +=
     verticalVelocity * delta;
 
-  /*
-    GROUND
-  */
+  const groundHeight =
+    isCrouched
+      ? CROUCH_HEIGHT
+      : STAND_HEIGHT;
 
   if (
-    playerPosition.y <= 2.1
+    playerPosition.y <= groundHeight
   ) {
 
     playerPosition.y =
-      2.1;
+      groundHeight;
 
-    verticalVelocity =
-      0;
+    verticalVelocity = 0;
 
-    isGrounded =
-      true;
+    isGrounded = true;
 
   } else {
 
-    isGrounded =
-      false;
+    isGrounded = false;
   }
 
-  /*
-    SEND POSITION TO SERVER
-  */
+  // =========================================
+  // ENERGY HUD
+  // =========================================
 
-  networkTimer +=
-    delta;
+  updateEnergyHUD();
+// =========================================
+// ENERGY HUD
+// =========================================
 
-  if (
-    networkTimer >= 0.05
-  ) {
+const energyHUD =
+  document.createElement("div");
 
-    networkTimer =
-      0;
+energyHUD.id =
+  "energyHUD";
+
+energyHUD.innerHTML = `
+  <div id="energyLabel">ENERGY</div>
+  <div id="energyBar">
+    <div id="energyFill"></div>
+  </div>
+`;
+
+document.body.appendChild(
+  energyHUD
+);
+
+const energyFill =
+  document.getElementById(
+    "energyFill"
+  );
+
+const energyLabel =
+  document.getElementById(
+    "energyLabel"
+  );
+
+const energyStyle =
+  document.createElement("style");
+
+energyStyle.textContent = `
+  #energyHUD {
+    position: fixed;
+    left: 30px;
+    bottom: 105px;
+    width: 220px;
+    z-index: 1000;
+    pointer-events: none;
+    font-family: Arial, sans-serif;
+  }
+
+  #energyLabel {
+    font-size: 12px;
+    font-weight: bold;
+    letter-spacing: 2px;
+    margin-bottom: 5px;
+    color: white;
+  }
+
+  #energyBar {
+    width: 100%;
+    height: 10px;
+    border: 1px solid rgba(255,255,255,.5);
+    background: rgba(0,0,0,.5);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+
+  #energyFill {
+    width: 100%;
+    height: 100%;
+    transition: width .05s linear;
+  }
+`;
+
+document.head.appendChild(
+  energyStyle
+);
+
+
+function updateEnergyHUD() {
+
+  const percent =
+    Math.max(
+      0,
+      Math.min(
+        100,
+        energy
+      )
+    );
+
+  energyFill.style.width =
+    percent + "%";
+
+  if (percent <= 15) {
+    energyFill.style.background =
+      "#ff3030";
+  } else if (percent <= 40) {
+    energyFill.style.background =
+      "#ffaa00";
+  } else {
+    energyFill.style.background =
+      "#00e5ff";
+  }
+
+  energyLabel.textContent =
+    "ENERGY " +
+    Math.round(energy);
+}
+
+  // =========================================
+  // NETWORK
+  // =========================================
+
+  networkTimer += delta;
+
+  if (networkTimer >= 0.05) {
+
+    networkTimer = 0;
 
     socket.emit(
       "playerMove",
       {
         position: {
-          x:
-            playerPosition.x,
-
-          y:
-            playerPosition.y,
-
-          z:
-            playerPosition.z
+          x: playerPosition.x,
+          y: playerPosition.y,
+          z: playerPosition.z
         },
 
         rotation: {
-          x:
-            pitch,
-
-          y:
-            yaw,
-
-          z:
-            0
+          x: pitch,
+          y: yaw,
+          z: 0
         }
       }
     );
   }
 }
-
-addEventListener("keydown", e => {
-
-  if (isShopOpen) return;
-
-  const k =
-    e.key.toLowerCase();
-
-  if (k === "w")
-    movement.forward = true;
-
-  if (k === "s")
-    movement.backward = true;
-
-  if (k === "a")
-    movement.left = true;
-
-  if (k === "d")
-    movement.right = true;
-
-  if (k === "shift")
-    movement.sprint = true;
-
-  if (k === "c")
-    movement.crouch = true;
-
-  if (
-    k === " " &&
-    controls.isLocked &&
-    isGrounded
-  ) {
-
-    e.preventDefault();
-
-    verticalVelocity =
-      10;
-
-    isGrounded =
-      false;
-  }
-});
 
 addEventListener("keyup", e => {
 
@@ -2976,152 +3128,81 @@ function renderScoreboard() {
    INPUT
 ====================================================== */
 
-window.addEventListener(
-  "keydown",
-  event => {
-    if (
-      event.target ===
-      usernameInput
-    ) {
-      return;
-    }
+addEventListener("keydown", e => {
 
-    if (isShopOpen) {
-      return;
-    }
+  if (isShopOpen) return;
 
-    const key =
-      event.key.toLowerCase();
+  const k = e.key.toLowerCase();
 
-    if (key === "w")
-      movement.forward = true;
-
-    if (key === "s")
-      movement.backward = true;
-
-    if (key === "a")
-      movement.left = true;
-
-    if (key === "d")
-      movement.right = true;
-
-    if (
-      event.key === "Shift"
-    ) {
-      movement.sprint =
-        true;
-    }
-
-    if (
-      event.code ===
-      "Space"
-    ) {
-      event.preventDefault();
-
-      if (
-        isGrounded &&
-        controls.isLocked
-      ) {
-        verticalVelocity =
-          10;
-
-        isGrounded = false;
-      }
-    }
-
-    if (key === "c") {
-      movement.crouch =
-        true;
-    }
-
-    if (key === "r") {
-      reload();
-    }
-
-    if (key === "v") {
-      toggleCameraMode();
-    }
-
-    if (key === "b") {
-      openGunShop();
-    }
-
-    if (
-      event.key === "Tab"
-    ) {
-      event.preventDefault();
-
-      scoreOpen = true;
-
-      scoreboard.style.display =
-        "block";
-
-      renderScoreboard();
-    }
-
-    if (
-      /^[1-5]$/.test(
-        event.key
-      )
-    ) {
-      const index =
-        Number(event.key) - 1;
-
-      const gunId =
-        weaponOrder[index];
-
-      if (
-        ownedGuns[gunId]
-      ) {
-        currentGun =
-          gunId;
-
-        applyGunVisual();
-      }
-    }
+  if (k === "w") {
+    movement.forward = true;
+    e.preventDefault();
   }
-);
 
-window.addEventListener(
-  "keyup",
-  event => {
-    const key =
-      event.key.toLowerCase();
-
-    if (key === "w")
-      movement.forward = false;
-
-    if (key === "s")
-      movement.backward = false;
-
-    if (key === "a")
-      movement.left = false;
-
-    if (key === "d")
-      movement.right = false;
-
-    if (
-      event.key === "Shift"
-    ) {
-      movement.sprint =
-        false;
-    }
-
-    if (key === "c") {
-      movement.crouch =
-        false;
-    }
-
-    if (
-      event.key === "Tab"
-    ) {
-      scoreOpen = false;
-
-      scoreboard.style.display =
-        "none";
-    }
+  if (k === "s") {
+    movement.backward = true;
+    e.preventDefault();
   }
-);
+
+  if (k === "a") {
+    movement.left = true;
+    e.preventDefault();
+  }
+
+  if (k === "d") {
+    movement.right = true;
+    e.preventDefault();
+  }
+
+  if (k === "shift") {
+    movement.sprint = true;
+    e.preventDefault();
+  }
+
+  if (k === "c") {
+    movement.crouch = true;
+    e.preventDefault();
+  }
+
+  // Jump
+  if (
+    k === " " &&
+    controls.isLocked &&
+    isGrounded &&
+    !isCrouched
+  ) {
+
+    e.preventDefault();
+
+    verticalVelocity = 10;
+
+    isGrounded = false;
+  }
+});
+
+
+addEventListener("keyup", e => {
+
+  const k = e.key.toLowerCase();
+
+  if (k === "w")
+    movement.forward = false;
+
+  if (k === "s")
+    movement.backward = false;
+
+  if (k === "a")
+    movement.left = false;
+
+  if (k === "d")
+    movement.right = false;
+
+  if (k === "shift")
+    movement.sprint = false;
+
+  if (k === "c")
+    movement.crouch = false;
+});
 
 window.addEventListener(
   "mousedown",
