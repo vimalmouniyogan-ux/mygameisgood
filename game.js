@@ -1970,16 +1970,19 @@ function updateMovement(delta) {
   }
 
   // =========================================
-  // ENERGY
+  // ENERGY / SPRINT
   // =========================================
+
+  const moving =
+    movement.forward ||
+    movement.backward ||
+    movement.left ||
+    movement.right;
 
   const wantsToSprint =
     movement.sprint &&
     !isCrouched &&
-    (movement.forward ||
-     movement.backward ||
-     movement.left ||
-     movement.right);
+    moving;
 
   let actuallySprinting = false;
 
@@ -1987,11 +1990,9 @@ function updateMovement(delta) {
 
     actuallySprinting = true;
 
-    energy -=
-      SPRINT_DRAIN * delta;
+    energy -= SPRINT_DRAIN * delta;
 
-    sprintRegenTimer =
-      REGEN_DELAY;
+    sprintRegenTimer = REGEN_DELAY;
 
     if (energy <= 0) {
       energy = 0;
@@ -2001,11 +2002,12 @@ function updateMovement(delta) {
   } else {
 
     if (sprintRegenTimer > 0) {
+
       sprintRegenTimer -= delta;
+
     } else {
 
-      energy +=
-        ENERGY_REGEN * delta;
+      energy += ENERGY_REGEN * delta;
 
       if (energy > MAX_ENERGY) {
         energy = MAX_ENERGY;
@@ -2014,41 +2016,35 @@ function updateMovement(delta) {
   }
 
   // =========================================
-  // PROPER WASD
+  // WASD DIRECTION
   // =========================================
 
-  const dir =
-    new THREE.Vector3();
+  const inputX =
+    (movement.right ? 1 : 0) -
+    (movement.left ? 1 : 0);
 
-  if (movement.forward)
-    dir.z -= 1;
+  const inputZ =
+    (movement.backward ? 1 : 0) -
+    (movement.forward ? 1 : 0);
 
-  if (movement.backward)
-    dir.z += 1;
+  if (
+    inputX !== 0 ||
+    inputZ !== 0
+  ) {
 
-  if (movement.left)
-    dir.x -= 1;
-
-  if (movement.right)
-    dir.x += 1;
-
-  if (dir.lengthSq() > 0) {
-
-    dir.normalize();
-
-    // Get EXACT direction the camera is facing
+    // Camera forward
     const forward =
       new THREE.Vector3();
 
-    camera.getWorldDirection(
-      forward
-    );
+    camera.getWorldDirection(forward);
 
-    // Ignore looking up/down
     forward.y = 0;
-    forward.normalize();
 
-    // Camera's right direction
+    if (forward.lengthSq() > 0) {
+      forward.normalize();
+    }
+
+    // Camera right
     const right =
       new THREE.Vector3(
         -forward.z,
@@ -2059,64 +2055,69 @@ function updateMovement(delta) {
     const moveDirection =
       new THREE.Vector3();
 
-    // W/S
-    moveDirection.addScaledVector(
-      forward,
-      -dir.z
-    );
-
-    // A/D
     moveDirection.addScaledVector(
       right,
-      dir.x
+      inputX
     );
 
-    moveDirection.normalize();
+    moveDirection.addScaledVector(
+      forward,
+      -inputZ
+    );
 
-    // =========================================
-    // SPEED
-    // =========================================
+    if (moveDirection.lengthSq() > 0) {
 
-    let speed;
+      moveDirection.normalize();
 
-    if (isCrouched) {
-      speed = CROUCH_SPEED;
-    } else if (actuallySprinting) {
-      speed = SPRINT_SPEED;
-    } else {
-      speed = WALK_SPEED;
-    }
+      // =====================================
+      // SPEED
+      // =====================================
 
-    const step =
-      speed * delta;
+      let speed = WALK_SPEED;
 
-    // X collision
-    const nx =
-      playerPosition.clone();
+      if (isCrouched) {
+        speed = CROUCH_SPEED;
+      } else if (actuallySprinting) {
+        speed = SPRINT_SPEED;
+      }
 
-    nx.x +=
-      moveDirection.x * step;
+      const step =
+        speed * delta;
 
-    if (!collides(nx)) {
-      playerPosition.x =
-        nx.x;
-    }
+      // =====================================
+      // X COLLISION
+      // =====================================
 
-    // Z collision
-    const nz =
-      playerPosition.clone();
+      const nextX =
+        playerPosition.clone();
 
-    nz.z +=
-      moveDirection.z * step;
+      nextX.x +=
+        moveDirection.x * step;
 
-    if (!collides(nz)) {
-      playerPosition.z =
-        nz.z;
+      if (!collides(nextX)) {
+        playerPosition.x =
+          nextX.x;
+      }
+
+      // =====================================
+      // Z COLLISION
+      // =====================================
+
+      const nextZ =
+        playerPosition.clone();
+
+      nextZ.z +=
+        moveDirection.z * step;
+
+      if (!collides(nextZ)) {
+        playerPosition.z =
+          nextZ.z;
+      }
     }
   }
 
   // =========================================
-  // CROUCH / STANDING HEIGHT
+  // CROUCH HEIGHT
   // =========================================
 
   const targetHeight =
@@ -2172,109 +2173,6 @@ function updateMovement(delta) {
   // =========================================
 
   updateEnergyHUD();
-// =========================================
-// ENERGY HUD
-// =========================================
-
-const energyHUD =
-  document.createElement("div");
-
-energyHUD.id =
-  "energyHUD";
-
-energyHUD.innerHTML = `
-  <div id="energyLabel">ENERGY</div>
-  <div id="energyBar">
-    <div id="energyFill"></div>
-  </div>
-`;
-
-document.body.appendChild(
-  energyHUD
-);
-
-const energyFill =
-  document.getElementById(
-    "energyFill"
-  );
-
-const energyLabel =
-  document.getElementById(
-    "energyLabel"
-  );
-
-const energyStyle =
-  document.createElement("style");
-
-energyStyle.textContent = `
-  #energyHUD {
-    position: fixed;
-    left: 30px;
-    bottom: 105px;
-    width: 220px;
-    z-index: 1000;
-    pointer-events: none;
-    font-family: Arial, sans-serif;
-  }
-
-  #energyLabel {
-    font-size: 12px;
-    font-weight: bold;
-    letter-spacing: 2px;
-    margin-bottom: 5px;
-    color: white;
-  }
-
-  #energyBar {
-    width: 100%;
-    height: 10px;
-    border: 1px solid rgba(255,255,255,.5);
-    background: rgba(0,0,0,.5);
-    border-radius: 3px;
-    overflow: hidden;
-  }
-
-  #energyFill {
-    width: 100%;
-    height: 100%;
-    transition: width .05s linear;
-  }
-`;
-
-document.head.appendChild(
-  energyStyle
-);
-
-
-function updateEnergyHUD() {
-
-  const percent =
-    Math.max(
-      0,
-      Math.min(
-        100,
-        energy
-      )
-    );
-
-  energyFill.style.width =
-    percent + "%";
-
-  if (percent <= 15) {
-    energyFill.style.background =
-      "#ff3030";
-  } else if (percent <= 40) {
-    energyFill.style.background =
-      "#ffaa00";
-  } else {
-    energyFill.style.background =
-      "#00e5ff";
-  }
-
-  energyLabel.textContent =
-    "ENERGY " +
-    Math.round(energy);
-}
 
   // =========================================
   // NETWORK
@@ -2305,28 +2203,108 @@ function updateEnergyHUD() {
   }
 }
 
-addEventListener("keyup", e => {
+/* ======================================================
+   KEYBOARD CONTROLS
+====================================================== */
 
-  const k =
-    e.key.toLowerCase();
+window.addEventListener("keydown", e => {
 
-  if (k === "w")
+  if (isShopOpen) return;
+
+  const k = e.key.toLowerCase();
+
+  if (
+    ["w", "a", "s", "d", "shift", "c", " "]
+      .includes(k)
+  ) {
+    e.preventDefault();
+  }
+
+  if (k === "w") {
+    movement.forward = true;
+  }
+
+  if (k === "s") {
+    movement.backward = true;
+  }
+
+  if (k === "a") {
+    movement.left = true;
+  }
+
+  if (k === "d") {
+    movement.right = true;
+  }
+
+  if (k === "shift") {
+    movement.sprint = true;
+  }
+
+  if (k === "c") {
+    movement.crouch = true;
+  }
+
+  // Jump
+  if (
+    k === " " &&
+    controls.isLocked &&
+    isGrounded &&
+    !isCrouched
+  ) {
+    verticalVelocity = 10;
+    isGrounded = false;
+  }
+
+  // Reload
+  if (k === "r") {
+    reload();
+  }
+
+  // Third-person / first-person
+  if (k === "v") {
+    toggleCameraMode();
+  }
+});
+
+window.addEventListener("keyup", e => {
+
+  const k = e.key.toLowerCase();
+
+  if (k === "w") {
     movement.forward = false;
+  }
 
-  if (k === "s")
+  if (k === "s") {
     movement.backward = false;
+  }
 
-  if (k === "a")
+  if (k === "a") {
     movement.left = false;
+  }
 
-  if (k === "d")
+  if (k === "d") {
     movement.right = false;
+  }
 
-  if (k === "shift")
+  if (k === "shift") {
     movement.sprint = false;
+  }
 
-  if (k === "c")
+  if (k === "c") {
     movement.crouch = false;
+  }
+});
+
+// Prevent stuck movement if the browser loses focus
+window.addEventListener("blur", () => {
+
+  movement.forward = false;
+  movement.backward = false;
+  movement.left = false;
+  movement.right = false;
+  movement.sprint = false;
+  movement.crouch = false;
+  firing = false;
 });
 
 /* ======================================================
@@ -3128,81 +3106,6 @@ function renderScoreboard() {
    INPUT
 ====================================================== */
 
-addEventListener("keydown", e => {
-
-  if (isShopOpen) return;
-
-  const k = e.key.toLowerCase();
-
-  if (k === "w") {
-    movement.forward = true;
-    e.preventDefault();
-  }
-
-  if (k === "s") {
-    movement.backward = true;
-    e.preventDefault();
-  }
-
-  if (k === "a") {
-    movement.left = true;
-    e.preventDefault();
-  }
-
-  if (k === "d") {
-    movement.right = true;
-    e.preventDefault();
-  }
-
-  if (k === "shift") {
-    movement.sprint = true;
-    e.preventDefault();
-  }
-
-  if (k === "c") {
-    movement.crouch = true;
-    e.preventDefault();
-  }
-
-  // Jump
-  if (
-    k === " " &&
-    controls.isLocked &&
-    isGrounded &&
-    !isCrouched
-  ) {
-
-    e.preventDefault();
-
-    verticalVelocity = 10;
-
-    isGrounded = false;
-  }
-});
-
-
-addEventListener("keyup", e => {
-
-  const k = e.key.toLowerCase();
-
-  if (k === "w")
-    movement.forward = false;
-
-  if (k === "s")
-    movement.backward = false;
-
-  if (k === "a")
-    movement.left = false;
-
-  if (k === "d")
-    movement.right = false;
-
-  if (k === "shift")
-    movement.sprint = false;
-
-  if (k === "c")
-    movement.crouch = false;
-});
 
 window.addEventListener(
   "mousedown",
