@@ -1,60 +1,125 @@
 /* ======================================================
-   NEON STRIKE - REBUILT MULTIPLAYER SERVER
+   NEON STRIKE - REBUILT MULTIPLAYER CLIENT
+   Three.js r128 + Socket.IO
 ====================================================== */
 
-const express = require("express");
-const http = require("http");
-const path = require("path");
-const { Server } = require("socket.io");
+const SERVER_URL = "https://mygameisgood.onrender.com";
 
-const app = express();
+const socket = io(SERVER_URL, {
+  transports: ["websocket", "polling"],
+  reconnection: true,
+  reconnectionAttempts: Infinity,
+  reconnectionDelay: 1000,
+  reconnectionDelayMax: 6000,
+  timeout: 25000
+});
 
-const server =
-  http.createServer(app);
+const $ = id => document.getElementById(id);
 
-const io =
-  new Server(server, {
-    cors: {
-      origin: "*",
-      methods: ["GET", "POST"]
-    }
-  });
+const healthValue = $("healthValue");
+const scoreValue = $("scoreValue");
+const coinsValue = $("coinsValue");
+const playerCountValue = $("playerCountValue");
+const gunValue = $("gunValue");
 
-const PORT =
-  process.env.PORT || 3000;
+const startOverlay = $("startOverlay");
+const playButton = $("playButton");
 
-app.use(
-  express.json()
-);
+const usernameInput = $("usernameInput");
+const statusText = $("statusText");
 
-app.use(
-  express.static(
-    path.join(__dirname)
-  )
-);
+const damageFlash = $("damageFlash");
+const hitMarker = $("hitMarker");
+const killMessage = $("killMessage");
 
-app.get(
-  "/health",
-  (req, res) => {
-    res.json({
-      ok: true,
-      players:
-        players.size
-    });
-  }
-);
+const shopButton = $("shopButton");
+const shopPanel = $("shopPanel");
+const closeShop = $("closeShop");
+const shopCoins = $("shopCoins");
+const gunList = $("gunList");
 
-app.get(
-  "/",
-  (req, res) => {
-    res.sendFile(
-      path.join(
-        __dirname,
-        "index.html"
-      )
-    );
-  }
-);
+const ammoValue = $("ammoValue");
+const reserveValue = $("reserveValue");
+const reloadText = $("reloadText");
+
+const crosshair = $("crosshair");
+const killFeed = $("killFeed");
+const scoreboard = $("scoreboard");
+const scoreboardList = $("scoreboardList");
+
+/* ======================================================
+   STATE
+====================================================== */
+
+let localPlayerId = null;
+let playerName = "";
+let playerJoined = false;
+let joinRequested = false;
+
+let health = 100;
+let score = 0;
+let coins = 0;
+
+let currentGun = "pistol";
+let ownedGuns = {
+  pistol: true
+};
+
+let isShopOpen = false;
+let cameraMode = "first";
+let isAiming = false;
+let firing = false;
+let isReloading = false;
+
+let verticalVelocity = 0;
+let isGrounded = true;
+let isCrouched = false;
+
+let lastShotTime = 0;
+let networkTimer = 0;
+let scoreOpen = false;
+let reloadTimeout = null;
+
+const playerPosition = new THREE.Vector3(0, 2.1, 25);
+
+let yaw = 0;
+let pitch = 0;
+
+const otherPlayers = new Map();
+const collisionBoxes = [];
+const projectiles = [];
+
+const clock = new THREE.Clock();
+
+const movement = {
+  forward: false,
+  backward: false,
+  left: false,
+  right: false,
+  sprint: false,
+  crouch: false
+};
+
+// ===============================
+// MOVEMENT SETTINGS
+// ===============================
+
+const WALK_SPEED = 19;
+const SPRINT_SPEED = 30;
+const CROUCH_SPEED = 9;
+
+const STAND_HEIGHT = 2.1;
+const CROUCH_HEIGHT = 1.25;
+
+// Energy system
+const MAX_ENERGY = 100;
+let energy = MAX_ENERGY;
+
+const SPRINT_DRAIN = 28;     // energy per second
+const ENERGY_REGEN = 20;     // energy per second
+const REGEN_DELAY = 0.8;
+
+let sprintRegenTimer = 0;
 
 /* ======================================================
    WEAPONS
@@ -65,50 +130,337 @@ const GUNS = {
     name: "Pistol",
     price: 0,
     damage: 25,
-    cooldown: 220
+    cooldown: 220,
+    magazine: 12,
+    reserve: 60,
+    reload: 900,
+    spread: 0.004,
+    color: 0x6d7881,
+    automatic: false
   },
 
   smg: {
     name: "SMG",
     price: 20,
     damage: 15,
-    cooldown: 75
+    cooldown: 75,
+    magazine: 30,
+    reserve: 120,
+    reload: 1100,
+    spread: 0.018,
+    color: 0x00e5ff,
+    automatic: true
   },
 
   shotgun: {
     name: "Shotgun",
     price: 40,
     damage: 12,
-    cooldown: 700
+    cooldown: 700,
+    magazine: 6,
+    reserve: 36,
+    reload: 1400,
+    spread: 0.085,
+    color: 0xffa52f,
+    automatic: false
   },
 
   rifle: {
     name: "Assault Rifle",
     price: 60,
     damage: 35,
-    cooldown: 150
+    cooldown: 150,
+    magazine: 30,
+    reserve: 90,
+    reload: 1300,
+    spread: 0.01,
+    color: 0x62ff75,
+    automatic: true
   },
 
   railgun: {
     name: "Railgun",
     price: 100,
     damage: 80,
-    cooldown: 1000
+    cooldown: 1000,
+    magazine: 5,
+    reserve: 20,
+    reload: 1600,
+    spread: 0,
+    color: 0xff47ff,
+    automatic: false
   }
 };
 
+const weaponOrder = [
+  "pistol",
+  "smg",
+  "shotgun",
+  "rifle",
+  "railgun"
+];
+
+const ammoState = {};
+
+for (const [id, weapon] of Object.entries(GUNS)) {
+  ammoState[id] = {
+    magazine: weapon.magazine,
+    reserve: weapon.reserve
+  };
+}
+
 /* ======================================================
-   PLAYERS
+   THREE.JS
 ====================================================== */
 
-const players =
-  new Map();
+const scene = new THREE.Scene();
+
+scene.background = new THREE.Color(0x02020b);
+
+scene.fog = new THREE.Fog(
+  0x02020b,
+  55,
+  190
+);
+
+const camera = new THREE.PerspectiveCamera(
+  76,
+  innerWidth / innerHeight,
+  0.05,
+  500
+);
+
+camera.position.set(
+  playerPosition.x,
+  playerPosition.y,
+  playerPosition.z
+);
+
+const renderer = new THREE.WebGLRenderer({
+  antialias: true,
+  powerPreference: "high-performance"
+});
+
+renderer.setPixelRatio(
+  Math.min(window.devicePixelRatio, 2)
+);
+
+renderer.setSize(
+  innerWidth,
+  innerHeight
+);
+
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type =
+  THREE.PCFSoftShadowMap;
+
+if ("outputEncoding" in renderer) {
+  renderer.outputEncoding =
+    THREE.sRGBEncoding;
+}
+
+$("game").appendChild(renderer.domElement);
+
+const controls =
+  new THREE.PointerLockControls(
+    camera,
+    renderer.domElement
+  );
+
+  controls.addEventListener("change", () => {
+  yaw = camera.rotation.y;
+  pitch = camera.rotation.x;
+});
 
 /* ======================================================
-   MAP COLLISION
+   LIGHTING
 ====================================================== */
 
-const collisionBoxes = [];
+scene.add(
+  new THREE.AmbientLight(
+    0x617aa5,
+    0.42
+  )
+);
+
+const moon =
+  new THREE.DirectionalLight(
+    0x86a8ff,
+    1.1
+  );
+
+moon.position.set(
+  -30,
+  60,
+  25
+);
+
+moon.castShadow = true;
+
+scene.add(moon);
+
+const lights = [];
+
+function neonLight(
+  color,
+  x,
+  y,
+  z,
+  intensity = 2.2,
+  distance = 28
+) {
+  const light =
+    new THREE.PointLight(
+      color,
+      intensity,
+      distance,
+      2
+    );
+
+  light.position.set(
+    x,
+    y,
+    z
+  );
+
+  scene.add(light);
+
+  lights.push(light);
+
+  return light;
+}
+
+neonLight(
+  0x00eaff,
+  0,
+  8,
+  0,
+  3.2,
+  42
+);
+
+neonLight(
+  0xff16d9,
+  -38,
+  8,
+  -35,
+  2.6,
+  30
+);
+
+neonLight(
+  0x7b35ff,
+  38,
+  8,
+  -35,
+  2.6,
+  30
+);
+
+neonLight(
+  0x00ff9d,
+  -38,
+  7,
+  35,
+  2.3,
+  28
+);
+
+neonLight(
+  0xff245c,
+  38,
+  7,
+  35,
+  2.3,
+  28
+);
+
+/* ======================================================
+   MATERIALS
+====================================================== */
+
+function mat(
+  color,
+  roughness = 0.65,
+  metalness = 0.2,
+  emissive = 0x000000,
+  emissiveIntensity = 0
+) {
+  return new THREE.MeshStandardMaterial({
+    color,
+    roughness,
+    metalness,
+    emissive,
+    emissiveIntensity
+  });
+}
+
+const floorMat = mat(
+  0x080d16,
+  0.7,
+  0.5,
+  0x001522,
+  0.8
+);
+
+const wallMat = mat(
+  0x101824,
+  0.58,
+  0.72,
+  0x03101c,
+  0.7
+);
+
+const darkMat = mat(
+  0x070b13,
+  0.5,
+  0.85,
+  0x02030a,
+  0.6
+);
+
+const metalMat = mat(
+  0x273449,
+  0.28,
+  0.9,
+  0x051322,
+  0.5
+);
+
+const glassMat =
+  new THREE.MeshStandardMaterial({
+    color: 0x102f4a,
+    transparent: true,
+    opacity: 0.55,
+    metalness: 0.6,
+    roughness: 0.15,
+    emissive: 0x003b55,
+    emissiveIntensity: 1.5
+  });
+
+const neonC =
+  new THREE.MeshBasicMaterial({
+    color: 0x00eaff
+  });
+
+const neonM =
+  new THREE.MeshBasicMaterial({
+    color: 0xff18dc
+  });
+
+const neonG =
+  new THREE.MeshBasicMaterial({
+    color: 0x56ff89
+  });
+
+const neonP =
+  new THREE.MeshBasicMaterial({
+    color: 0x874cff
+  });
+
+/* ======================================================
+   MAP
+====================================================== */
 
 function addCollisionBox(
   x,
@@ -130,1404 +482,657 @@ function addCollisionBox(
   });
 }
 
-/* Outer walls */
-
-addCollisionBox(
-  0,
-  0,
-  -60,
-  120,
-  10,
-  1.2
-);
-
-addCollisionBox(
-  0,
-  0,
-  60,
-  120,
-  10,
-  1.2
-);
-
-addCollisionBox(
-  -60,
-  0,
-  0,
-  1.2,
-  10,
-  120
-);
-
-addCollisionBox(
-  60,
-  0,
-  0,
-  1.2,
-  10,
-  120
-);
-
-/* Towers */
-
-addCollisionBox(
-  -42,
-  0,
-  -38,
-  17,
-  13,
-  16
-);
-
-addCollisionBox(
-  42,
-  0,
-  -38,
-  17,
-  13,
-  16
-);
-
-addCollisionBox(
-  -42,
-  0,
-  38,
-  17,
-  13,
-  16
-);
-
-addCollisionBox(
-  42,
-  0,
-  38,
-  17,
-  13,
-  16
-);
-
-/* Central structures */
-
-addCollisionBox(
-  0,
-  0,
-  -18,
-  30,
-  5,
-  3
-);
-
-addCollisionBox(
-  -16,
-  0,
-  -7,
-  3,
-  7,
-  20
-);
-
-addCollisionBox(
-  16,
-  0,
-  -7,
-  3,
-  7,
-  20
-);
-
-/* Cover */
-
-const covers = [
-  [-30, 2, 13, 2, 3],
-  [30, 2, 13, 2, 3],
-  [-8, 22, 12, 2, 3],
-  [8, 22, 12, 2, 3],
-  [-27, -15, 6, 4, 3],
-  [27, -15, 6, 4, 3],
-  [-24, 24, 7, 4, 4],
-  [24, 24, 7, 4, 4]
-];
-
-for (
-  const [x, z, w, d, h]
-  of covers
+function addBox(
+  x,
+  y,
+  z,
+  w,
+  h,
+  d,
+  material = wallMat,
+  collide = true
 ) {
-  addCollisionBox(
+  const mesh =
+    new THREE.Mesh(
+      new THREE.BoxGeometry(
+        w,
+        h,
+        d
+      ),
+      material
+    );
+
+  mesh.position.set(
+    x,
+    y + h / 2,
+    z
+  );
+
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+
+  scene.add(mesh);
+
+  if (collide) {
+    addCollisionBox(
+      x,
+      y,
+      z,
+      w,
+      h,
+      d
+    );
+  }
+
+  return mesh;
+}
+
+function strip(
+  x,
+  y,
+  z,
+  w,
+  h,
+  d,
+  material,
+  rotation = 0
+) {
+  const mesh =
+    new THREE.Mesh(
+      new THREE.BoxGeometry(
+        w,
+        h,
+        d
+      ),
+      material
+    );
+
+  mesh.position.set(
+    x,
+    y,
+    z
+  );
+
+  mesh.rotation.y =
+    rotation;
+
+  scene.add(mesh);
+
+  return mesh;
+}
+
+function tower(
+  x,
+  z,
+  w,
+  d,
+  h,
+  color
+) {
+  addBox(
     x,
     0,
     z,
     w,
     h,
-    d
+    d,
+    darkMat,
+    true
+  );
+
+  const glass =
+    new THREE.Mesh(
+      new THREE.BoxGeometry(
+        w + 0.05,
+        h * 0.72,
+        d + 0.05
+      ),
+      glassMat
+    );
+
+  glass.position.set(
+    x,
+    h * 0.58,
+    z
+  );
+
+  scene.add(glass);
+
+  for (
+    let y = 2;
+    y < h;
+    y += 2.4
+  ) {
+    strip(
+      x - w / 2 - 0.04,
+      y,
+      z,
+      0.12,
+      0.09,
+      d + 0.3,
+      color
+    );
+
+    strip(
+      x + w / 2 + 0.04,
+      y,
+      z,
+      0.12,
+      0.09,
+      d + 0.3,
+      color
+    );
+  }
+
+  strip(
+    x,
+    h + 0.18,
+    z,
+    w + 0.4,
+    0.18,
+    0.16,
+    color
+  );
+
+  for (
+    let i = -1;
+    i <= 1;
+    i++
+  ) {
+    strip(
+      x + i * (w * 0.3),
+      h + 1.2,
+      z,
+      0.08,
+      0.9,
+      0.08,
+      color
+    );
+  }
+}
+
+function pillar(
+  x,
+  z,
+  color
+) {
+  addBox(
+    x,
+    0,
+    z,
+    2.2,
+    9,
+    2.2,
+    metalMat,
+    true
+  );
+
+  strip(
+    x,
+    4.5,
+    z,
+    2.35,
+    0.13,
+    2.35,
+    color
+  );
+
+  strip(
+    x,
+    8.2,
+    z,
+    2.35,
+    0.13,
+    2.35,
+    color
+  );
+}
+
+/* Floor */
+
+addBox(
+  0,
+  -0.5,
+  0,
+  120,
+  1,
+  120,
+  floorMat,
+  false
+);
+
+/* Neon grid */
+
+for (
+  let i = -60;
+  i <= 60;
+  i += 6
+) {
+  strip(
+    i,
+    0.025,
+    0,
+    0.035,
+    0.04,
+    120,
+    i % 12 === 0
+      ? neonC
+      : new THREE.MeshBasicMaterial({
+          color: 0x14243a
+        })
+  );
+
+  strip(
+    0,
+    0.026,
+    i,
+    120,
+    0.04,
+    0.035,
+    i % 12 === 0
+      ? neonM
+      : new THREE.MeshBasicMaterial({
+          color: 0x14243a
+        })
+  );
+}
+
+/* Outer walls */
+
+addBox(
+  0,
+  0,
+  -60,
+  120,
+  10,
+  1.2,
+  wallMat,
+  true
+);
+
+addBox(
+  0,
+  0,
+  60,
+  120,
+  10,
+  1.2,
+  wallMat,
+  true
+);
+
+addBox(
+  -60,
+  0,
+  0,
+  1.2,
+  10,
+  120,
+  wallMat,
+  true
+);
+
+addBox(
+  60,
+  0,
+  0,
+  1.2,
+  10,
+  120,
+  wallMat,
+  true
+);
+
+/* Wall lights */
+
+for (
+  let x = -54;
+  x <= 54;
+  x += 12
+) {
+  strip(
+    x,
+    5,
+    -59.32,
+    7,
+    0.16,
+    0.08,
+    x % 24 === 0
+      ? neonC
+      : neonM
+  );
+
+  strip(
+    x,
+    5,
+    59.32,
+    7,
+    0.16,
+    0.08,
+    x % 24 === 0
+      ? neonM
+      : neonC
+  );
+}
+
+for (
+  let z = -54;
+  z <= 54;
+  z += 12
+) {
+  strip(
+    -59.32,
+    5,
+    z,
+    0.08,
+    0.16,
+    7,
+    neonP
+  );
+
+  strip(
+    59.32,
+    5,
+    z,
+    0.08,
+    0.16,
+    7,
+    neonG
+  );
+}
+
+/* Four cyber towers */
+
+tower(
+  -42,
+  -38,
+  17,
+  16,
+  13,
+  neonC
+);
+
+tower(
+  42,
+  -38,
+  17,
+  16,
+  13,
+  neonM
+);
+
+tower(
+  -42,
+  38,
+  17,
+  16,
+  13,
+  neonG
+);
+
+tower(
+  42,
+  38,
+  17,
+  16,
+  13,
+  neonP
+);
+
+/* Central arena */
+
+addBox(
+  0,
+  0,
+  -18,
+  30,
+  5,
+  3,
+  metalMat,
+  true
+);
+
+strip(
+  0,
+  5.08,
+  -18,
+  30,
+  0.2,
+  0.16,
+  neonC
+);
+
+addBox(
+  -16,
+  0,
+  -7,
+  3,
+  7,
+  20,
+  wallMat,
+  true
+);
+
+addBox(
+  16,
+  0,
+  -7,
+  3,
+  7,
+  20,
+  wallMat,
+  true
+);
+
+strip(
+  -14.42,
+  3.5,
+  -7,
+  0.12,
+  7,
+  20,
+  neonM
+);
+
+strip(
+  14.42,
+  3.5,
+  -7,
+  0.12,
+  7,
+  20,
+  neonC
+);
+
+/* Reactor */
+
+const reactor =
+  new THREE.Group();
+
+scene.add(reactor);
+
+reactor.position.set(
+  0,
+  0,
+  7
+);
+
+const reactorBase =
+  new THREE.Mesh(
+    new THREE.CylinderGeometry(
+      5,
+      5,
+      0.7,
+      32
+    ),
+    metalMat
+  );
+
+reactorBase.position.y =
+  0.35;
+
+reactor.add(
+  reactorBase
+);
+
+const reactorCore =
+  new THREE.Mesh(
+    new THREE.CylinderGeometry(
+      2.2,
+      2.2,
+      5,
+      20
+    ),
+    new THREE.MeshBasicMaterial({
+      color: 0x00eaff,
+      transparent: true,
+      opacity: 0.72
+    })
+  );
+
+reactorCore.position.y =
+  3;
+
+reactor.add(
+  reactorCore
+);
+
+for (
+  let i = 0;
+  i < 4;
+  i++
+) {
+  const ring =
+    new THREE.Mesh(
+      new THREE.TorusGeometry(
+        3.1,
+        0.08,
+        8,
+        48
+      ),
+      i % 2
+        ? neonM
+        : neonC
+    );
+
+  ring.rotation.x =
+    Math.PI / 2;
+
+  ring.position.y =
+    3;
+
+  ring.rotation.z =
+    i * Math.PI / 4;
+
+  reactor.add(ring);
+}
+
+neonLight(
+  0x00eaff,
+  0,
+  4,
+  7,
+  3,
+  18
+);
+
+/* Side cover */
+
+const covers = [
+  [-30, 2, 13, 2, 3, neonM],
+  [30, 2, 13, 2, 3, neonC],
+  [-8, 22, 12, 2, 3, neonP],
+  [8, 22, 12, 2, 3, neonG],
+  [-27, -15, 6, 4, 3, neonM],
+  [27, -15, 6, 4, 3, neonC],
+  [-24, 24, 7, 4, 4, neonP],
+  [24, 24, 7, 4, 4, neonG]
+];
+
+for (
+  const [x, z, w, d, h, color]
+  of covers
+) {
+  addBox(
+    x,
+    0,
+    z,
+    w,
+    h,
+    d,
+    metalMat,
+    true
+  );
+
+  strip(
+    x,
+    h + 0.05,
+    z,
+    w + 0.2,
+    0.12,
+    0.12,
+    color
   );
 }
 
 /* Pylons */
 
-addCollisionBox(
+pillar(
   -21,
-  0,
   -28,
-  2.2,
-  9,
-  2.2
+  neonC
 );
 
-addCollisionBox(
+pillar(
   21,
-  0,
   -28,
-  2.2,
-  9,
-  2.2
+  neonM
 );
 
-addCollisionBox(
+pillar(
   -21,
-  0,
   28,
-  2.2,
-  9,
-  2.2
+  neonG
 );
 
-addCollisionBox(
+pillar(
   21,
-  0,
   28,
-  2.2,
-  9,
-  2.2
+  neonP
 );
 
 /* ======================================================
-   SPAWNS
+   PLAYER AVATARS
 ====================================================== */
 
-const spawnPoints = [
-  {
-    x: -50,
-    y: 2.1,
-    z: 48
-  },
-
-  {
-    x: 50,
-    y: 2.1,
-    z: 48
-  },
-
-  {
-    x: -50,
-    y: 2.1,
-    z: -48
-  },
-
-  {
-    x: 50,
-    y: 2.1,
-    z: -48
-  },
-
-  {
-    x: 0,
-    y: 2.1,
-    z: 48
-  },
-
-  {
-    x: 0,
-    y: 2.1,
-    z: 32
-  }
-];
-
-function getSpawnPoint() {
-  return {
-    ...spawnPoints[
-      Math.floor(
-        Math.random() *
-          spawnPoints.length
-      )
-    ]
-  };
-}
-
-/* ======================================================
-   HELPERS
-====================================================== */
-
-function safeNumber(
-  value,
-  fallback = 0
+function makeNameTag(
+  username,
+  health = 100
 ) {
-  const number =
-    Number(value);
+  const canvas =
+    document.createElement("canvas");
 
-  return Number.isFinite(
-    number
-  )
-    ? number
-    : fallback;
-}
+  canvas.width = 512;
+  canvas.height = 128;
 
-function clamp(
-  value,
-  min,
-  max
-) {
-  return Math.max(
-    min,
-    Math.min(max, value)
-  );
-}
+  const ctx =
+    canvas.getContext("2d");
 
-function positionCollides(
-  position,
-  radius = 0.65
-) {
-  if (
-    position.x < -58 ||
-    position.x > 58 ||
-    position.z < -58 ||
-    position.z > 58
-  ) {
-    return true;
-  }
-
-  for (
-    const box of collisionBoxes
-  ) {
-    if (
-      position.x + radius >
-        box.minX &&
-      position.x - radius <
-        box.maxX &&
-      position.z + radius >
-        box.minZ &&
-      position.z - radius <
-        box.maxZ
-    ) {
-      return true;
-    }
-  }
-
-  return false;
-}
-
-function normalize(
-  x,
-  y,
-  z
-) {
-  const length =
-    Math.sqrt(
-      x * x +
-      y * y +
-      z * z
+  function draw() {
+    ctx.clearRect(
+      0,
+      0,
+      canvas.width,
+      canvas.height
     );
 
-  if (
-    !Number.isFinite(
-      length
-    ) ||
-    length < 0.000001
-  ) {
-    return null;
-  }
+    ctx.fillStyle =
+      "rgba(3,8,15,.85)";
 
-  return {
-    x: x / length,
-    y: y / length,
-    z: z / length
-  };
-}
-
-/* ======================================================
-   RAY / BOX
-====================================================== */
-
-function rayAABB(
-  origin,
-  direction,
-  box
-) {
-  let tMin = 0;
-  let tMax = Infinity;
-
-  const axes = [
-    [
-      origin.x,
-      direction.x,
-      box.minX,
-      box.maxX
-    ],
-
-    [
-      origin.y,
-      direction.y,
-      box.minY,
-      box.maxY
-    ],
-
-    [
-      origin.z,
-      direction.z,
-      box.minZ,
-      box.maxZ
-    ]
-  ];
-
-  for (
-    const [
-      originValue,
-      directionValue,
-      min,
-      max
-    ] of axes
-  ) {
-    if (
-      Math.abs(
-        directionValue
-      ) < 0.00000001
-    ) {
-      if (
-        originValue < min ||
-        originValue > max
-      ) {
-        return null;
-      }
-
-      continue;
-    }
-
-    let a =
-      (min - originValue) /
-      directionValue;
-
-    let b =
-      (max - originValue) /
-      directionValue;
-
-    if (a > b) {
-      [
-        a,
-        b
-      ] = [
-        b,
-        a
-      ];
-    }
-
-    tMin =
-      Math.max(
-        tMin,
-        a
-      );
-
-    tMax =
-      Math.min(
-        tMax,
-        b
-      );
-
-    if (
-      tMin > tMax
-    ) {
-      return null;
-    }
-  }
-
-  if (tMin >= 0)
-    return tMin;
-
-  if (tMax >= 0)
-    return tMax;
-
-  return null;
-}
-
-function nearestWallDistance(
-  origin,
-  direction,
-  maximum = 120
-) {
-  let best =
-    maximum;
-
-  for (
-    const box of collisionBoxes
-  ) {
-    const distance =
-      rayAABB(
-        origin,
-        direction,
-        box
-      );
-
-    if (
-      distance !== null &&
-      distance >= 0 &&
-      distance < best
-    ) {
-      best =
-        distance;
-    }
-  }
-
-  return best;
-}
-
-function raySphere(
-  origin,
-  direction,
-  center,
-  radius
-) {
-  const ox =
-    origin.x -
-    center.x;
-
-  const oy =
-    origin.y -
-    center.y;
-
-  const oz =
-    origin.z -
-    center.z;
-
-  const b =
-    ox * direction.x +
-    oy * direction.y +
-    oz * direction.z;
-
-  const c =
-    ox * ox +
-    oy * oy +
-    oz * oz -
-    radius * radius;
-
-  const discriminant =
-    b * b - c;
-
-  if (
-    discriminant < 0
-  ) {
-    return null;
-  }
-
-  const distance =
-    -b -
-    Math.sqrt(
-      discriminant
+    ctx.roundRect?.(
+      10,
+      10,
+      492,
+      108,
+      18
     );
-
-  return distance >= 0
-    ? distance
-    : null;
-}
-
-/* ======================================================
-   SNAPSHOTS
-====================================================== */
-
-function snapshot(
-  player
-) {
-  return {
-    id: player.id,
-
-    username:
-      player.username,
-
-    position: {
-      ...player.position
-    },
-
-    rotation: {
-      ...player.rotation
-    },
-
-    health:
-      player.health,
-
-    score:
-      player.score
-  };
-}
-
-function allPlayers(
-  exclude = null
-) {
-  const result = [];
-
-  for (
-    const player
-    of players.values()
-  ) {
-    if (
-      player.id !==
-      exclude
-    ) {
-      result.push(
-        snapshot(player)
-      );
-    }
-  }
-
-  return result;
-}
-
-function stateFor(
-  player
-) {
-  return {
-    id: player.id,
-
-    username:
-      player.username,
-
-    health:
-      player.health,
-
-    score:
-      player.score,
-
-    coins:
-      player.coins,
-
-    ownedGuns:
-      player.ownedGuns,
-
-    currentGun:
-      player.currentGun,
-
-    position:
-      player.position,
-
-    rotation:
-      player.rotation
-  };
-}
-
-/* ======================================================
-   SOCKET.IO
-====================================================== */
-
-io.on(
-  "connection",
-  socket => {
-    console.log(
-      "CONNECTED:",
-      socket.id
-    );
-
-    socket.emit(
-      "playerCount",
-      players.size
-    );
-
-    /* JOIN */
-
-    socket.on(
-      "joinGame",
-      data => {
-        let player =
-          players.get(
-            socket.id
-          );
-
-        if (player) {
-          socket.emit(
-            "joinAccepted",
-            stateFor(player)
-          );
-
-          return;
-        }
-
-        let username =
-          String(
-            data?.username ||
-              "Player"
-          )
-            .trim()
-            .replace(
-              /[^\w\- ]/g,
-              ""
-            )
-            .slice(0, 16);
-
-        if (!username) {
-          username =
-            "Player" +
-            Math.floor(
-              Math.random() *
-                9000 +
-                1000
-            );
-        }
-
-        const spawn =
-          getSpawnPoint();
-
-        player = {
-          id: socket.id,
-
-          username,
-
-          health: 100,
-
-          score: 0,
-
-          /* Give new players coins
-             so the shop can actually
-             be tested immediately. */
-
-          coins: 100,
-
-          ownedGuns: {
-            pistol: true
-          },
-
-          currentGun:
-            "pistol",
-
-          position: {
-            ...spawn
-          },
-
-          rotation: {
-            x: 0,
-            y: 0,
-            z: 0
-          },
-
-          lastShot: 0,
-
-          alive: true
-        };
-
-        players.set(
-          socket.id,
-          player
-        );
-
-        socket.emit(
-          "joinAccepted",
-          stateFor(player)
-        );
-
-        socket.emit(
-          "existingPlayers",
-          allPlayers(
-            socket.id
-          )
-        );
-
-        socket.broadcast.emit(
-          "playerJoined",
-          snapshot(player)
-        );
-
-        io.emit(
-          "playerCount",
-          players.size
-        );
-
-        console.log(
-          `${username} joined the game`
-        );
-      }
-    );
-
-    /* MOVEMENT */
-
-    socket.on(
-      "playerMove",
-      data => {
-        const player =
-          players.get(
-            socket.id
-          );
-
-        if (
-          !player ||
-          !player.alive ||
-          !data?.position
-        ) {
-          return;
-        }
-
-        const next = {
-          x: clamp(
-            safeNumber(
-              data.position.x,
-              player.position.x
-            ),
-            -58,
-            58
-          ),
-
-          y: clamp(
-            safeNumber(
-              data.position.y,
-              player.position.y
-            ),
-            2.1,
-            6
-          ),
-
-          z: clamp(
-            safeNumber(
-              data.position.z,
-              player.position.z
-            ),
-            -58,
-            58
-          )
-        };
-
-        const dx =
-          next.x -
-          player.position.x;
-
-        const dz =
-          next.z -
-          player.position.z;
-
-        /* Prevent teleporting */
-
-        if (
-          Math.abs(dx) >
-            2.2 ||
-          Math.abs(dz) >
-            2.2
-        ) {
-          return;
-        }
-
-        if (
-          !positionCollides(
-            next
-          )
-        ) {
-          player.position =
-            next;
-        }
-
-        if (
-          data.rotation
-        ) {
-          player.rotation = {
-            x: clamp(
-              safeNumber(
-                data.rotation.x,
-                player.rotation.x
-              ),
-              -1.55,
-              1.55
-            ),
-
-            y: safeNumber(
-              data.rotation.y,
-              player.rotation.y
-            ),
-
-            z: 0
-          };
-        }
-
-        socket.broadcast.emit(
-          "playerMoved",
-          snapshot(player)
-        );
-      }
-    );
-
-    /* ==================================================
-       SHOOT
-    ================================================== */
-
-    socket.on(
-      "shoot",
-      data => {
-        const shooter =
-          players.get(
-            socket.id
-          );
-
-        if (
-          !shooter ||
-          !shooter.alive ||
-          !data?.origin ||
-          !data?.direction
-        ) {
-          return;
-        }
-
-        const gunId =
-          GUNS[data.gunId]
-            ? data.gunId
-            : "pistol";
-
-        if (
-          !shooter.ownedGuns[
-            gunId
-          ]
-        ) {
-          return;
-        }
-
-        const weapon =
-          GUNS[gunId];
-
-        const now =
-          Date.now();
-
-        if (
-          now -
-            shooter.lastShot <
-          weapon.cooldown
-        ) {
-          return;
-        }
-
-        shooter.lastShot =
-          now;
-
-        let origin = {
-          x: safeNumber(
-            data.origin.x,
-            shooter.position.x
-          ),
-
-          y: safeNumber(
-            data.origin.y,
-            shooter.position.y +
-              1.2
-          ),
-
-          z: safeNumber(
-            data.origin.z,
-            shooter.position.z
-          )
-        };
-
-        /*
-          Don't trust a wildly
-          distant client origin.
-        */
-
-        const originDistance =
-          Math.sqrt(
-            Math.pow(
-              origin.x -
-                shooter.position.x,
-              2
-            ) +
-            Math.pow(
-              origin.y -
-                shooter.position.y,
-              2
-            ) +
-            Math.pow(
-              origin.z -
-                shooter.position.z,
-              2
-            )
-          );
-
-        if (
-          originDistance > 4
-        ) {
-          origin = {
-            x: shooter.position.x,
-
-            y:
-              shooter.position.y +
-              1.4,
-
-            z: shooter.position.z
-          };
-        }
-
-        const direction =
-          normalize(
-            safeNumber(
-              data.direction.x
-            ),
-            safeNumber(
-              data.direction.y
-            ),
-            safeNumber(
-              data.direction.z
-            )
-          );
-
-        if (!direction)
-          return;
-
-        /* Tell everyone else about
-           the shot for visuals. */
-
-        socket.broadcast.emit(
-          "playerShot",
-          {
-            id:
-              shooter.id,
-
-            origin,
-
-            direction,
-
-            gunId
-          }
-        );
-
-        /* Wall distance */
-
-        const wallDistance =
-          nearestWallDistance(
-            origin,
-            direction,
-            120
-          );
-
-        let target = null;
-        let targetDistance =
-          wallDistance;
-
-        /* Hit detection */
-
-        for (
-          const candidate
-          of players.values()
-        ) {
-          if (
-            candidate.id ===
-              shooter.id ||
-            !candidate.alive ||
-            candidate.health <= 0
-          ) {
-            continue;
-          }
-
-          const head = {
-            x:
-              candidate.position.x,
-
-            y:
-              candidate.position.y +
-              1.65,
-
-            z:
-              candidate.position.z
-          };
-
-          const body = {
-            x:
-              candidate.position.x,
-
-            y:
-              candidate.position.y +
-              0.9,
-
-            z:
-              candidate.position.z
-          };
-
-          const headHit =
-            raySphere(
-              origin,
-              direction,
-              head,
-              0.43
-            );
-
-          const bodyHit =
-            raySphere(
-              origin,
-              direction,
-              body,
-              0.7
-            );
-
-          let hitDistance =
-            Infinity;
-
-          let damage =
-            weapon.damage;
-
-          if (
-            headHit !== null
-          ) {
-            hitDistance =
-              headHit;
-
-            damage =
-              Math.round(
-                weapon.damage *
-                  1.5
-              );
-          }
-
-          if (
-            bodyHit !== null &&
-            bodyHit <
-              hitDistance
-          ) {
-            hitDistance =
-              bodyHit;
-
-            damage =
-              weapon.damage;
-          }
-
-          if (
-            hitDistance <
-            targetDistance
-          ) {
-            targetDistance =
-              hitDistance;
-
-            target =
-              candidate;
-
-            target.__pendingDamage =
-              damage;
-          }
-        }
-
-        if (!target)
-          return;
-
-        const damage =
-          target.__pendingDamage ||
-          weapon.damage;
-
-        delete target.__pendingDamage;
-
-        target.health =
-          Math.max(
-            0,
-            target.health -
-              damage
-          );
-
-        const targetSocket =
-          io.sockets.sockets.get(
-            target.id
-          );
-
-        if (targetSocket) {
-          targetSocket.emit(
-            "playerHit",
-            {
-              targetId:
-                target.id,
-
-              health:
-                target.health,
-
-              attackerId:
-                shooter.id,
-
-              attackerName:
-                shooter.username
-            }
-          );
-        }
-
-        io.emit(
-          "playerMoved",
-          snapshot(target)
-        );
-
-        /* ELIMINATION */
-
-        if (
-          target.health <= 0
-        ) {
-          target.alive =
-            false;
-
-          shooter.score++;
-
-          shooter.coins +=
-            10;
-
-          socket.emit(
-            "scoreUpdate",
-            {
-              id:
-                shooter.id,
-
-              score:
-                shooter.score
-            }
-          );
-
-          socket.emit(
-            "currencyUpdate",
-            {
-              id:
-                shooter.id,
-
-              coins:
-                shooter.coins
-            }
-          );
-
-          io.emit(
-            "playerEliminated",
-            {
-              attackerId:
-                shooter.id,
-
-              attackerName:
-                shooter.username,
-
-              targetId:
-                target.id,
-
-              targetName:
-                target.username
-            }
-          );
-
-          /* Respawn */
-
-          setTimeout(
-            () => {
-              const current =
-                players.get(
-                  target.id
-                );
-
-              if (!current)
-                return;
-
-              const spawn =
-                getSpawnPoint();
-
-              current.health =
-                100;
-
-              current.alive =
-                true;
-
-              current.position = {
-                ...spawn
-              };
-
-              current.rotation = {
-                x: 0,
-                y: 0,
-                z: 0
-              };
-
-              const victimSocket =
-                io.sockets.sockets.get(
-                  current.id
-                );
-
-              if (
-                victimSocket
-              ) {
-                victimSocket.emit(
-                  "respawn",
-                  {
-                    id:
-                      current.id,
-
-                    health: 100,
-
-                    position:
-                      current.position
-                  }
-                );
-              }
-
-              io.emit(
-                "playerMoved",
-                snapshot(
-                  current
-                )
-              );
-            },
-            1800
-          );
-        }
-      }
-    );
-
-    /* ==================================================
-       BUY GUN
-    ================================================== */
-
-    socket.on(
-      "buyGun",
-      gunId => {
-        const player =
-          players.get(
-            socket.id
-          );
-
-        const weapon =
-          GUNS[gunId];
-
-        if (
-          !player ||
-          !weapon
-        ) {
-          return;
-        }
-
-        if (
-          player.ownedGuns[
-            gunId
-          ]
-        ) {
-          return;
-        }
-
-        if (
-          player.coins <
-          weapon.price
-        ) {
-          socket.emit(
-            "gunPurchaseFailed",
-            {
-              message:
-                "Not enough coins"
-            }
-          );
-
-          return;
-        }
-
-        player.coins -=
-          weapon.price;
-
-        player.ownedGuns[
-          gunId
-        ] = true;
-
-        player.currentGun =
-          gunId;
-
-        socket.emit(
-          "gunPurchased",
-          {
-            ownedGuns:
-              player.ownedGuns,
-
-            coins:
-              player.coins,
-
-            currentGun:
-              player.currentGun
-          }
-        );
-
-        socket.emit(
-          "currencyUpdate",
-          {
-            id:
-              player.id,
-
-            coins:
-              player.coins
-          }
-        );
-      }
-    );
-
-    /* ==================================================
-       EQUIP GUN
-    ================================================== */
-
-    socket.on(
-      "equipGun",
-      gunId => {
-        const player =
-          players.get(
-            socket.id
-          );
-
-        if (
-          !player ||
-          !GUNS[gunId] ||
-          !player.ownedGuns[
-            gunId
-          ]
-        ) {
-          return;
-        }
-
-        player.currentGun =
-          gunId;
-
-        socket.emit(
-          "gunInventory",
-          {
-            ownedGuns:
-              player.ownedGuns,
-
-            currentGun:
-              player.currentGun
-          }
-        );
-      }
-    );
-
-    /* ==================================================
-       DISCONNECT
-    ================================================== */
-
-    socket.on(
-      "disconnect",
-      reason => {
-        const player =
-          players.get(
-            socket.id
-          );
-
-        if (player) {
-          console.log(
-            `${player.username} disconnected: ${reason}`
-          );
-        }
-
-        players.delete(
-          socket.id
-        );
-
-        io.emit(
-          "playerLeft",
-          socket.id
-        );
-
-        io.emit(
-          "playerCount",
-          players.size
-        );
-      }
-    );
-  }
-);
-
-/* ======================================================
-   START SERVER
-====================================================== */
-
-server.listen(
-  PORT,
-  "0.0.0.0",
-  () => {
-    console.log(
-      `Neon Strike server running on port ${PORT}`
-    );
-  }
-);
