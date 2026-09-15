@@ -11,7 +11,53 @@ const socket = io(SERVER_URL, {
   reconnectionAttempts: Infinity,
   reconnectionDelay: 1000,
   reconnectionDelayMax: 6000,
-  timeout: 25000
+  timeout: 25000,
+  autoConnect: true
+});
+
+socket.on("connect", () => {
+  console.log("CONNECTED TO SERVER:", socket.id);
+
+  if (statusText) {
+    statusText.textContent = "CONNECTED";
+  }
+
+  requestJoin();
+});
+
+socket.on("connect_error", (error) => {
+  console.error("SERVER CONNECTION ERROR:", error);
+
+  if (statusText) {
+    statusText.textContent = "CONNECTION ERROR";
+  }
+});
+
+socket.on("disconnect", (reason) => {
+  console.log("DISCONNECTED:", reason);
+
+  if (statusText) {
+    statusText.textContent = "DISCONNECTED";
+  }
+});
+
+socket.on("joinAccepted", (data) => {
+  console.log("JOIN ACCEPTED:", data);
+
+  playerJoined = true;
+  joinRequested = false;
+
+  if (statusText) {
+    statusText.textContent = "IN ARENA";
+  }
+
+  if (startOverlay) {
+    startOverlay.style.display = "none";
+  }
+
+  try {
+    controls.lock();
+  } catch (e) {}
 });
 
 const $ = id => document.getElementById(id);
@@ -1075,64 +1121,4 @@ for (
   );
 }
 
-/* Pylons */
-
-pillar(
-  -21,
-  -28,
-  neonC
-);
-
-pillar(
-  21,
-  -28,
-  neonM
-);
-
-pillar(
-  -21,
-  28,
-  neonG
-);
-
-pillar(
-  21,
-  28,
-  neonP
-);
-
-/* ======================================================
-   PLAYER AVATARS
-====================================================== */
-
-function makeNameTag(
-  username,
-  health = 100
-) {
-  const canvas =
-    document.createElement("canvas");
-
-  canvas.width = 512;
-  canvas.height = 128;
-
-  const ctx =
-    canvas.getContext("2d");
-
-  function draw() {
-    ctx.clearRect(
-      0,
-      0,
-      canvas.width,
-      canvas.height
-    );
-
-    ctx.fillStyle =
-      "rgba(3,8,15,.85)";
-
-    ctx.roundRect?.(
-      10,
-      10,
-      492,
-      108,
-      18
-    );
+/* Pylons
